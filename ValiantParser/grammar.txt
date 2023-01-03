@@ -1,0 +1,12 @@
+﻿Type -> TyVar | TyApp
+TyVar -> '\'' IDENTIFIER
+TyApp -> ':' IDENTIFIER  Type*
+
+Term -> Var | Const | Comb | Abs | '(' Term ')' | Infix
+Var -> '$'? IDENTIFIER Type?
+Const -> IDENTIFIER Type?
+Comb -> Term Term
+Abs -> '\' Var+ '.' Term
+Infix -> Term KEYWORD Term
+
+Comb is left associative
