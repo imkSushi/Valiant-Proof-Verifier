@@ -76,22 +76,6 @@ public sealed class Kernel
         return new Sequent(SafeMakeEquality(term, term));
     }
 
-    public Theorem Transitivity(Theorem left, Theorem right) //Replaceable by x = y, y = z |- x = z given INST & INST_TYPE
-    {
-        var leftSeq = (Sequent) left;
-        var rightSeq = (Sequent) right;
-        
-        if (!TryDeconstructEquality(leftSeq.Conclusion, out var leftLeft, out var middleLeft))
-            throw new TheoremException("Left theorem is not an equality");
-        if (!TryDeconstructEquality(rightSeq.Conclusion, out var middleRight, out var rightRight))
-            throw new TheoremException("Right theorem is not an equality");
-        
-        if (middleLeft != middleRight)
-            throw new TheoremException("Left and right theorems do not share the middle term");
-        
-        return new Sequent(leftSeq.Premises.Concat(rightSeq.Premises), SafeMakeEquality(leftLeft, rightRight));
-    }
-
     public Theorem Congruence(Theorem applications, Theorem arguments) //Replaceable by f = g, x = y |- f x = g y given INST & INST_TYPE
     {
         var applicationsSeq = (Sequent) applications;
@@ -332,7 +316,6 @@ public sealed class Kernel
         return false;
     }
 
-    //TODO: Possibly static
     private Term SafeMakeEquality(Term left, Term right)
     {
         var type = TypeOf(left);

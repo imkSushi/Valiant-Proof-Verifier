@@ -7,21 +7,15 @@ public abstract record Type
         
     }
 
-    internal sealed record TyVar(string Name) : Type
+    public sealed override string ToString()
     {
-        public override string ToString()
-        {
-            return Name;
-        }
+        return Printer.UniversalPrinter.PrintType(this);
     }
+
+    internal sealed record TyVar(string Name) : Type;
 
     internal sealed record TyApp(string Name, Type[] Args) : Type
     {
-        public override string ToString()
-        {
-            return $"{Name}<{string.Join(", ", Args.Select(type => type.ToString()))}>";
-        }
-
         public override int GetHashCode()
         {
             return HashCode.Combine(Name, Args.Aggregate(613, HashCode.Combine));

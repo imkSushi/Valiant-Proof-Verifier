@@ -2,13 +2,21 @@
 
 using ValiantParser;
 using ValiantProofVerifier;
-using ValiantProver;
+using ValiantProver.Modules;
+using static ValiantProver.Modules.ImpliesTheorems;
 
 var kernel = new Kernel();
-var parser = new PrattParser(kernel);
-var utility = new Utility(kernel);
-var utilThm = new UtilityTheorems(kernel, utility, parser);
+var parser = new Parser(kernel);
 
-var left = parser.ParseTerm("a:bool = b");
-var thm = utilThm.CommutativityEquality(left);
-Console.WriteLine(thm);
+var printer = new PrettyPrinter.PrettyPrinter(parser, kernel);
+printer.Activate();
+
+TopLevel.Load();
+
+var eq = parser.ParseTerm("p = q = r"); // (p = q) = r i.e. = (= p q) r
+
+var p = kernel.Assume(parser.ParseTerm("p :bool"));
+var qImpP = AddImpliesAssumption(p, parser.ParseTerm("q :bool"));
+var pImpQImpP = Discharge(parser.ParseTerm("p :bool"), qImpP);
+
+Console.WriteLine(pImpQImpP);

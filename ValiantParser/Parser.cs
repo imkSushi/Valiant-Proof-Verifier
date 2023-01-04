@@ -5,7 +5,7 @@ using ValiantProofVerifier;
 
 namespace ValiantParser;
 
-public sealed class PrattParser
+public sealed class Parser
 {
     
     private Lexer _lexer = new();
@@ -56,11 +56,13 @@ public sealed class PrattParser
         return false;
     }
 
-    public PrattParser(Kernel kernel)
+    public Parser(Kernel kernel)
     {
         _kernel = kernel;
     }
     
+    private Dictionary<string,Func<Result<InfTerm>>> _customPrefixRules = new();
+
     private Func<Result<InfTerm>>? TryGetPrefixRule(Token token)
     {
         return token switch
@@ -69,6 +71,7 @@ public sealed class PrattParser
             KeywordToken("(")         => Grouping,
             KeywordToken("\\")        => Lambda,
             KeywordToken("$")         => Escape,
+            KeywordToken(var keyword) => !_suspendedKeywords.Contains(keyword) && _customPrefixRules.TryGetValue(keyword, out var output) ? output : null,
             _                         => null
         };
     }
@@ -87,7 +90,7 @@ public sealed class PrattParser
         };
     }
     
-    public bool TryRegisterInfixRule(string keyword, string constant, int precedence)
+    public bool TryRegisterInfixRule(string keyword, string constant, int precedence, bool leftAssociative)
     {
         if (!_kernel.TryGetConstantType(constant, out var constantType))
             return false;
@@ -109,12 +112,33 @@ public sealed class PrattParser
             _index++;
             if (!Combination(term, left).Deconstruct(out var leftCombination, out var error))
                 return error;
-            
-            if (!ParsePrecedence((InfixPrecedence) precedence).Deconstruct(out var rightTerm, out error))
+
+            if (!ParsePrecedence((InfixPrecedence)(leftAssociative ? precedence + 1 : precedence)).Deconstruct(out var rightTerm, out error))
                 return error;
-            
+
             return Combination(leftCombination, rightTerm);
         }, (InfixPrecedence)precedence);
+        return true;
+    }
+
+    public bool RegisterLambdaRule(string keyword, string constant)
+    {
+        if (!_kernel.TryGetConstantType(constant, out var constantType))
+            return false;
+
+        var fakeType = FakeType.FromType(constantType);
+        if (fakeType is not TyApp { Name: "fun", Args: [_, _] })
+            return false;
+
+        if (_customPrefixRules.ContainsKey(keyword))
+            return false;
+        
+        if (!_lexer.TryAddKeyword(keyword))
+            return false;
+
+        var term = new InfConst(constant, InfType.FromType(constantType, false));
+        
+        _customPrefixRules[keyword] = () => Lambda(term);
         return true;
     }
     
@@ -134,6 +158,14 @@ public sealed class PrattParser
     {
         _suspendedKeywords.Remove(keyword);
         _lexer.AddKeyword(keyword);
+    }
+
+    public Result<int> TryGetInfixPrecedence(string keyword)
+    {
+        if (!_customInfixRules.TryGetValue(keyword, out var output))
+            return $"Keyword {keyword} is not registered as an infix rule";
+        
+        return (int) output.precedence;
     }
 
     private Result<InfTerm> Grouping(InfTerm arg)
@@ -164,7 +196,7 @@ public sealed class PrattParser
 
         while (precedence <= GetInfixPrecedence())
         {
-            var infixFunction = TryGetInfixRule(Current())!.Value.rule;
+            var (infixFunction, _) = TryGetInfixRule(Current())!.Value;
             
             if (!infixFunction(output).Deconstruct(out output, out error))
                 return error;
@@ -290,6 +322,11 @@ public sealed class PrattParser
 
     private Result<InfTerm> Lambda()
     {
+        return Lambda(null);
+    }
+
+    private Result<InfTerm> Lambda(InfTerm? modifier)
+    {
         var variables = new List<InfVar>();
         string? error;
         _index++;
@@ -316,7 +353,9 @@ public sealed class PrattParser
         
         for (var i = variables.Count - 1; i >= 0; i--)
         {
-            body = new InfAbs(variables[i], body);
+            body = modifier == null
+                ? new InfAbs(variables[i], body)
+                : new InfComb(modifier, new InfAbs(variables[i], body));
         }
         
         return body;

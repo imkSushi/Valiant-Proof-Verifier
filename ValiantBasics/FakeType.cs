@@ -25,7 +25,7 @@ public abstract record FakeType
     }
 }
 
-public record TyVar(string Name) : FakeType
+public sealed record TyVar(string Name) : FakeType
 {
 
     public override Result<Type> TryMakeType(Kernel kernel)
@@ -39,7 +39,7 @@ public record TyVar(string Name) : FakeType
     }
 }
 
-public record TyApp(string Name, FakeType[] Args) : FakeType
+public sealed record TyApp(string Name, FakeType[] Args) : FakeType
 {
 
     public override Result<Type> TryMakeType(Kernel kernel)
@@ -57,5 +57,24 @@ public record TyApp(string Name, FakeType[] Args) : FakeType
     public override string ToString()
     {
         return $"{Name}<{string.Join(", ", Args.Select(type => type.ToString()))}>";
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Name, Args.Aggregate(613, HashCode.Combine));
+    }
+
+    public bool Equals(TyApp? other)
+    {
+        if (other is null)
+            return false;
+            
+        if (other.Name != Name)
+            return false;
+
+        if (other.Args.Length != Args.Length)
+            return false;
+
+        return !Args.Where((t, i) => t != other.Args[i]).Any();
     }
 }

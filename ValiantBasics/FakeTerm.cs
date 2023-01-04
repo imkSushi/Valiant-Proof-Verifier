@@ -44,7 +44,7 @@ public abstract record FakeTerm
     public abstract FakeType TypeOf();
 }
 
-public record Var(string Name, FakeType Type) : FakeTerm
+public sealed record Var(string Name, FakeType Type) : FakeTerm
 {
     public override Result<Term> TryMakeTerm(Kernel kernel)
     {
@@ -69,7 +69,7 @@ public record Var(string Name, FakeType Type) : FakeTerm
     }
 }
 
-public record Const(string Name, FakeType Type) : FakeTerm
+public sealed record Const(string Name, FakeType Type) : FakeTerm
 {
     public override Result<Term> TryMakeTerm(Kernel kernel)
     {
@@ -98,7 +98,7 @@ public record Const(string Name, FakeType Type) : FakeTerm
     }
 }
 
-public record Comb : FakeTerm
+public sealed record Comb : FakeTerm
 {
     private Comb(FakeTerm application, FakeTerm argument)
     {
@@ -156,7 +156,7 @@ public record Comb : FakeTerm
     }
 }
 
-public record Abs(Var Parameter, FakeTerm Abstraction) : FakeTerm
+public sealed record Abs(Var Parameter, FakeTerm Abstraction) : FakeTerm
 {
     public override Result<Term> TryMakeTerm(Kernel kernel)
     {

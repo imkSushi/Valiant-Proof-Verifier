@@ -23,10 +23,10 @@ public record Theorem
         {
             
         }
+    }
 
-        public override string ToString()
-        {
-            return $"{string.Join(", ", Premises)} |- {Conclusion}";
-        }
+    public sealed override string ToString()
+    {
+        return Printer.UniversalPrinter.PrintTheorem(this);
     }
 }
