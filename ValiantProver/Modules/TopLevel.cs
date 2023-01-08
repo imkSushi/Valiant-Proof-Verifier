@@ -6,7 +6,6 @@ public static class TopLevel
 
     static TopLevel()
     {
-        ImpliesTheorems.Load();
-        ForAllTheorems.Load();
+        ExistsTheorems.Load();
     }
 }

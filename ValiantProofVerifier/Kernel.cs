@@ -30,6 +30,8 @@ public sealed class Kernel
     
     public static Type BoolTy => new TyApp("bool", Array.Empty<Type>());
     public static Type Aty => new TyVar("A");
+    
+    public HashSet<string> GetConstantsList() => new(_constants.Keys);
 
     public void DefineType(string name, int arity)
     {
@@ -37,7 +39,7 @@ public sealed class Kernel
             throw new TheoremException($"Type {name} already defined");
         _types.Add(name, arity);
     }
-    
+
     public bool TryDefineType(string name, int arity)
     {
         if (_types.ContainsKey(name))
@@ -211,6 +213,7 @@ public sealed class Kernel
                 return new Comb(SafeInstantiateTypes(map, application), SafeInstantiateTypes(map, argument));
             case Abs { Parameter: var parameter, Abstraction: var abstraction }:
             {
+                /*
                 var frees = FreesIn(term).ToArray();
                 var mappedFrees = frees.Select(free => SafeInstantiateTypes(map, free)).Concat(frees).Distinct().ToArray();
                 var potentialNewParameter = SafeInstantiateTypes(map, parameter);
@@ -219,7 +222,8 @@ public sealed class Kernel
                 {
                     [parameter] = newParameter
                 }, abstraction);
-                return new Abs(newParameter, SafeInstantiateTypes(map, subbedAbstraction));
+                return new Abs(newParameter, SafeInstantiateTypes(map, subbedAbstraction));*/
+                return new Abs(SafeInstantiateTypes(map, parameter), SafeInstantiateTypes(map, abstraction));
             }
             default:
                 throw new TheoremException("Bad term");

@@ -1,4 +1,5 @@
-﻿using ValiantProofVerifier;
+﻿using ValiantBasics;
+using ValiantProofVerifier;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
@@ -13,12 +14,11 @@ public static class TransitivityTheorems
     static TransitivityTheorems()
     {
         CommutativityTheorems.Load();
-        BinaryUtilities.Load();
         
-        Transitivity = ConstructTransitivity();
+        TransitivityTheorem = ConstructTransitivity();
     }
     
-    public static Theorem Transitivity { get; }
+    public static Theorem TransitivityTheorem { get; }
     
 
     private static Theorem ConstructTransitivity()
@@ -55,22 +55,39 @@ public static class TransitivityTheorems
         return Commutativity(mp);
     }
 
-    public static Theorem ApplyTransitivity(Theorem left, Theorem right)
+    public static Theorem Transitivity(Theorem left, Theorem right)
     {
-        var type = TypeOf(BinaryLeft(left));
+        return TryTransitivity(left, right).ValueOrException();
+    }
+
+    public static Result<Theorem> TryTransitivity(Theorem left, Theorem right)
+    {
+        if (!TryBinaryDeconstruct(left, "=").Deconstruct(out var leftTuple, out var error))
+            return error;
+        
+        var (leftLeft, leftMiddle) = leftTuple;
+
+        if (!TryBinaryDeconstruct(right, "=").Deconstruct(out var rightTuple, out error))
+            return error;
+        
+        var (rightMiddle, rightRight) = rightTuple;
+        
+        if (leftMiddle != rightMiddle)
+            return "The middle terms of the two theorems must be equal";
+        
+        var type = leftLeft.TypeOf();
         
         var typed = InstantiateTypes(new Dictionary<Type, Type>
         {
             [MakeType("a")] = type
-        }, Transitivity);
+        }, TransitivityTheorem);
         
         var substituted = InstantiateVariables(new Dictionary<Term, Term>
         {
-            [MakeVariable("p", type)] = BinaryLeft(left),
-            [MakeVariable("q", type)] = BinaryRight(left),
-            [MakeVariable("r", type)] = BinaryRight(right)
+            [MakeVariable("p", type)] = leftLeft,
+            [MakeVariable("q", type)] = leftMiddle,
+            [MakeVariable("r", type)] = rightRight
         }, typed);
-        var eliminatedLeft = Elimination(left, substituted);
-        return Elimination(right, eliminatedLeft);
+        return Elimination(substituted, left, right);
     }
 }

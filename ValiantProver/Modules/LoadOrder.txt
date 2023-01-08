@@ -1,14 +1,16 @@
 ﻿Theory          <-
-Binary          <- Theory
 Type            <- Theory
 Basic           <- Type
-Commutativity   <- Basic
+Binary          <- Basic
+Commutativity   <- Binary
+Transitivity    <- Commutativity
 Truth           <- Commutativity
-Transitivity    <- Commutativity,   Binary
 Eta             <- Transitivity
 LambdaEval      <- Eta
+Unary           <- LambdaEval
 And             <- LambdaEval,      Truth
-ForAll          <- LambdaEval,      Truth
+ForAll          <- Unary,           Truth
 Implies         <- And
+Exists          <- Implies,         ForAll
 
-TopLevel        <- Implies, ForAll
+TopLevel        <- Exists

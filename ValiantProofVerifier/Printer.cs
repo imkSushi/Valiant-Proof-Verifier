@@ -29,12 +29,12 @@ public class Printer
     
     public virtual string PrintComb(Term app, Term arg)
     {
-        return $"{PrintTerm(app)} {PrintTerm(arg)}";
+        return $"({PrintTerm(app)} {PrintTerm(arg)})";
     }
     
     public virtual string PrintAbs(Term parameter, Term abstraction)
     {
-        return $"λ {PrintTerm(parameter)} . {PrintTerm(abstraction)}";
+        return @$"(\ {PrintTerm(parameter)} . {PrintTerm(abstraction)})";
     }
     
     public virtual string PrintType(Type type)

@@ -1,4 +1,5 @@
-﻿using ValiantProofVerifier;
+﻿using ValiantBasics;
+using ValiantProofVerifier;
 using static ValiantProver.Modules.Theory;
 
 namespace ValiantProver.Modules;
@@ -14,11 +15,11 @@ public static class TypeUtilities
 
     public static TermType TypeOfEnum(Term term)
     {
-        if (Theory.IsVar(term))
+        if (term.IsVar())
             return TermType.Var;
-        if (Theory.IsConst(term))
+        if (term.IsConst())
             return TermType.Const;
-        if (Theory.IsComb(term))
+        if (term.IsComb())
             return TermType.Comb;
         return TermType.Abs;
     }
@@ -33,31 +34,41 @@ public static class TypeUtilities
 
     public static bool IsAbs(Theorem thm)
     {
-        return Theory.IsAbs(DeconstructTheorem(thm).conclusion);
+        return thm.Conclusion().IsAbs();
     }
 
     public static bool IsComb(Theorem thm)
     {
-        return Theory.IsComb(DeconstructTheorem(thm).conclusion);
+        return thm.Conclusion().IsComb();
     }
 
     public static bool IsConst(Theorem thm)
     {
-        return Theory.IsConst(DeconstructTheorem(thm).conclusion);
+        return thm.Conclusion().IsConst();
     }
 
     public static bool IsVar(Theorem thm)
     {
-        return Theory.IsVar(DeconstructTheorem(thm).conclusion);
+        return thm.Conclusion().IsVar();
     }
 
     public static (Term parameter, Term abstraction) DeconstructAbs(Theorem thm)
     {
-        return Theory.DeconstructAbs(DeconstructTheorem(thm).conclusion);
+        return thm.Conclusion().DeconstructAbs();
+    }
+    
+    public static Result<Term, Term> TryDeconstructAbs(Theorem thm) //parameter & abstraction
+    {
+        return thm.Conclusion().TryDeconstructAbs();
     }
 
     public static (Term application, Term argument) DeconstructComb(Theorem thm)
     {
-        return Theory.DeconstructComb(DeconstructTheorem(thm).conclusion);
+        return thm.Conclusion().DeconstructComb();
+    }
+    
+    public static Result<Term, Term> TryDeconstructComb(Theorem thm) //application & argument
+    {
+        return thm.Conclusion().TryDeconstructComb();
     }
 }

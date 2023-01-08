@@ -1,11 +1,11 @@
-﻿using ValiantProofVerifier;
+﻿using ValiantBasics;
+using ValiantProofVerifier;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
 using static ValiantProver.Modules.EtaReductionTheorems;
 using static ValiantProver.Modules.Theory;
 using static ValiantProver.Modules.TransitivityTheorems;
-using static ValiantProver.Modules.TypeUtilities;
 
 namespace ValiantProver.Modules;
 
@@ -17,116 +17,75 @@ public static class LambdaEvaluator
     {
         EtaReductionTheorems.Load();
     }
-    
-    public static Theorem EvaluateLambdas(Term term)
-    {
-        var thm = Reflexivity(term);
-
-        while (RequiresAnotherLambdaIteration(term))
-        {
-            var newThm = EvaluateLambdasIteration(term);
-            thm = ApplyTransitivity(thm, newThm);
-            term = BinaryRight(thm);
-        }
-        
-        return thm;
-    }
 
     public static Theorem EvaluateLambdas(Theorem theorem)
     {
-        var equality = EvaluateLambdas(DeconstructTheorem(theorem).conclusion);
+        var equality = EvaluateLambdas(theorem.Deconstruct().conclusion);
         
         return ModusPonens(equality, theorem);
     }
     
-    public static bool RequiresAnotherLambdaIteration(Term term)
+    public static Theorem EvaluateLambdas(Term term)
     {
-        switch (TypeOfEnum(term))
-        {
-            case TermType.Var:
-                return false;
-            case TermType.Const:
-                return false;
-            case TermType.Abs:
-            {
-                var (param, abs) = DeconstructAbs(term);
-                switch (TypeOfEnum(abs))
-                {
-                    case TermType.Var:
-                        return false;
-                    case TermType.Const:
-                        return false;
-                    case TermType.Abs:
-                        return RequiresAnotherLambdaIteration(abs);
-                    case TermType.Comb:
-                    {
-                        if (RequiresAnotherLambdaIteration(abs))
-                            return true;
-                        var (app, arg) = DeconstructComb(abs);
-                        if (arg == param)
-                            return true;
-
-                        return false;
-                    }
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-            }
-            case TermType.Comb:
-            {
-                var (app, arg) = DeconstructComb(term);
-
-                if (IsAbs(app) || RequiresAnotherLambdaIteration(app) || RequiresAnotherLambdaIteration(arg))
-                    return true;
-                
-                return false;
-            }
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
+        if (term.IsVar() || term.IsConst())
+            return Reflexivity(term);
+        
+        if (term.TryDeconstructAbs().IsSuccess(out var parameter, out var abstraction))
+            return EvaluateLambdasAbstractionsIteration(parameter, abstraction);
+        
+        var combTuple = term.DeconstructComb();
+        
+        return EvaluateLambdasCombinationIteration(combTuple.application, combTuple.argument);
     }
     
-    private static Theorem EvaluateLambdasIteration(Term term)
+    private static Theorem EvaluateLambdasAbstractionsIteration(Term parameter, Term abstraction)
     {
-        if (IsVar(term) || IsConst(term))
-            return Reflexivity(term);
-        if (IsAbs(term))
-        {
-            var (parameter, abstraction) = DeconstructAbs(term);
-            var evaluatedAbstraction = EvaluateLambdas(abstraction);
+        var evaluatedAbstraction = EvaluateLambdas(abstraction);
             
-            var evalAbsRight = BinaryRight(evaluatedAbstraction);
+        var evalAbsRight = BinaryRight(evaluatedAbstraction);
 
-            var output = Abstraction(parameter, evaluatedAbstraction);
+        var output = Abstraction(parameter, evaluatedAbstraction);
 
-            if (!IsComb(evalAbsRight) || DeconstructComb(evalAbsRight).argument != parameter)
-                return Abstraction(parameter, evaluatedAbstraction);
+        if (!evalAbsRight.TryDeconstructComb().Deconstruct(out var app, out var arg, out _) || arg != parameter || IsVariableFree(parameter, app))
+            return output;
             
-            var etaReduction = ApplyEtaReduction(BinaryRight(output));
-            return ApplyTransitivity(output, etaReduction);
-        }
-        
-        var (left, right) = DeconstructComb(term);
-        var evalApp = EvaluateLambdas(left);
-        var evalArg = EvaluateLambdas(right);
-        var rightApp = BinaryRight(evalApp);
-        var rightArg = BinaryRight(evalArg);
+        var etaReduction = ApplyEtaReduction(BinaryRight(output));
+        return Transitivity(output, etaReduction);
+    }
 
-        var potentialOutput = Congruence(evalApp, evalArg);
-        
-        if (!IsAbs(rightApp))
+    private static Theorem EvaluateLambdasCombinationIteration(Term application, Term argument)
+    {
+        var evalApp = EvaluateLambdas(application); // f = g
+        var evalArg = EvaluateLambdas(argument); // x = y
+        var rightApp = BinaryRight(evalApp); // g
+        var rightArg = BinaryRight(evalArg); // y
+
+        var potentialOutput = Congruence(evalApp, evalArg); // f x = g y
+
+        if (!rightApp.TryDeconstructAbs().IsSuccess(out var absTuple)) 
             return potentialOutput;
-
-        var param = DeconstructAbs(rightApp).parameter;
-        var reduction = BetaReduction(MakeCombination(rightApp, param));
+        
+        // f x = (\z . t) y i.e. rightApp is \t . t
+        var (param, abs) = absTuple;
+        var reduction = BetaReduction(MakeCombination(rightApp, param)); // (\z . t) z = t
         var substitution = InstantiateVariables(new Dictionary<Term, Term>
         {
             [param] = rightArg
-        }, reduction);
-        return ApplyTransitivity(potentialOutput, substitution);
+        }, reduction); // (\z . t) y = t[y/z]
+            
+        var transivity = Transitivity(potentialOutput, substitution);
+
+        var eval = EvaluateLambdas(BinaryRight(transivity));
+
+        return Transitivity(transivity, eval);
     }
 
     public static Theorem LambdaEquivalence(Term left, Term right)
+    {
+        return TryLambdaEquivalence(left, right).ValueOrException();
+    }
+
+    public static Result<Theorem> TryLambdaEquivalence(Term left, Term right)
     {
         var baseLeft = EvaluateLambdas(left);
         var baseRight = EvaluateLambdas(right);
@@ -135,80 +94,76 @@ public static class LambdaEvaluator
         var newRight = BinaryRight(baseRight);
         
         if (newLeft == newRight)
-            return ApplyTransitivity(baseLeft, Commutativity(baseRight));
+            return Transitivity(baseLeft, Commutativity(baseRight));
 
-        if (!IsAbs(newLeft) || !IsAbs(newRight))
-            throw new TheoremException("Terms are not equivalent");
+        if (newLeft.IsAbs() && newRight.IsAbs()) 
+            return TryLambdaEquivalenceAbstraction(baseLeft, baseRight);
 
-        var (leftParam, leftAbs) = DeconstructAbs(BinaryRight(baseLeft));
-        var (rightParam, rightAbs) = DeconstructAbs(BinaryRight(baseRight));
-
-        var substituted = LambdaSubstitute(BinaryRight(baseLeft), rightParam);
-
-        var transitive = ApplyTransitivity(baseLeft, substituted);
-
-        return ApplyTransitivity(transitive, Commutativity(baseRight));
+        if (newLeft.IsComb() && newRight.IsComb()) 
+            return TryLambdaEquivalenceCombination(baseLeft, baseRight);
+        
+        return "Terms are not equivalent";
     }
 
-    public static Theorem LambdaSubstitute(Term lambda, Term newVariable) // \x . f x & y
+    private static Result<Theorem> TryLambdaEquivalenceAbstraction(Theorem left, Theorem right)
     {
-        var (param, abstraction) = DeconstructAbs(lambda);
-        if (newVariable == param)
-            return Reflexivity(lambda); // (\x . f x) = (\x . f x)
+        var leftTerm = BinaryRight(left);
+        var (rightParam, rightAbs) = BinaryRight(right).DeconstructAbs();
+        var (leftParam, leftAbs) = leftTerm.DeconstructAbs();
 
-        var desiredAbstraction = InstantiateVariables(new Dictionary<Term, Term>
+        if (leftParam != rightParam)
         {
-            [param] = newVariable
-        }, abstraction); // f y
-        var desiredAbs = MakeAbstraction(newVariable, desiredAbstraction); // \y . f y
-        var appliedAbs = MakeCombination(desiredAbs, newVariable); // (\y . f y) y
-        var reducedAbs = BetaReduction(appliedAbs); // (\y . f y) y = f y
-        var substitutedAbs = InstantiateVariables(new Dictionary<Term, Term>
-        {
-            [newVariable] = param
-        }, reducedAbs); // (\y . f y) x = f x
-        var abstractedAbs = Abstraction(param, substitutedAbs); // (\x . (\y . f y) x) = (\x . f x)
-        var commutedAbstractedAbs = Commutativity(abstractedAbs); // (\x . f x) = (\x . (\y . f y) x)
-        var oldVariableName = DeconstructVar(param).name;
-        var tempName = "f";
-        if (oldVariableName == tempName)
-            tempName = "g";
-        
-        var customEta = CustomEtaReduction(DeconstructVar(param).name, tempName); // ('x' . 'f' 'x') = 'f'
+            if (!TryChangeLambdaVariable(leftTerm, rightParam).Deconstruct(out var substituted, out var error))
+                return error;
+            
+            left = Transitivity(left, substituted);
+            leftAbs = BinaryRight(left).DeconstructAbs().abstraction;
+        }
 
-        var typedCustomEta = InstantiateTypes(new Dictionary<Type, Type>
-        {
-            [MakeType("a")] = TypeOf(newVariable),
-            [MakeType("b")] = TypeOf(abstraction)
-        }, customEta); // typed as (\x . (\y . f y) x) = (\y . f y)
-        
-        var substitutedCustomEta = InstantiateVariables(new Dictionary<Term, Term>
-        {
-            [MakeVariable(tempName, TypeOf(desiredAbs))] = desiredAbs
-        }, typedCustomEta); // (\x . (\y . f y) x) = (\y . f y)
-        
-        return ApplyTransitivity(commutedAbstractedAbs, substitutedCustomEta);
+        if (!TryLambdaEquivalence(leftAbs, rightAbs).Deconstruct(out var thm, out var err))
+            return err;
+
+        var abstracted = Abstraction(rightParam, thm);
+        var transitivity = Transitivity(left, abstracted);
+
+        return Transitivity(transitivity, Commutativity(right));
     }
-    
-    
+
+    private static Result<Theorem> TryLambdaEquivalenceCombination(Theorem left, Theorem right)
+    {
+        var (leftApp, leftArg) = BinaryRight(left).DeconstructComb();
+        var (rightApp, rightArg) = BinaryRight(right).DeconstructComb();
+
+        if (!TryLambdaEquivalence(leftApp, rightApp).Deconstruct(out var appEq, out var error))
+            return error;
+        
+        if (!TryLambdaEquivalence(leftArg, rightArg).Deconstruct(out var argEq, out error))
+            return error;
+
+        var evalEq = Congruence(appEq, argEq);
+        
+        var transitive = Transitivity(left, evalEq);
+        
+        return Transitivity(transitive, Commutativity(right));
+    }/*
 
     public static Theorem ApplyBinaryDefinition(Theorem definition, Term left, Term right)
     {
-        var type = TypeOf(BinaryLeft(definition));
-        var leftTypes = DeconstructTyApp(type).args;
+        var type = BinaryLeft(definition).TypeOf();
+        var leftTypes = type.DeconstructTyApp().args;
         var templateRightType = leftTypes[0];
-        var templateLeftType = DeconstructTyApp(leftTypes[1]).args[0];
+        var templateLeftType = leftTypes[1].DeconstructTyApp().args[0];
         
-        var leftType = TypeOf(left);
-        var rightType = TypeOf(right);
+        var leftType = left.TypeOf();
+        var rightType = right.TypeOf();
         
         if (leftType != templateLeftType || rightType != templateRightType)
         {
             var dict = new Dictionary<Type, Type>();
             if (leftType != templateLeftType)
-                dict[templateLeftType] = leftType;
+                GenerateTypeMap(templateLeftType, leftType, dict);
             if (rightType != templateRightType)
-                dict[templateRightType] = rightType;
+                GenerateTypeMap(templateRightType, rightType, dict);
             
             definition = InstantiateTypes(dict, definition);
         }
@@ -217,5 +172,59 @@ public static class LambdaEvaluator
         var combRight = Congruence(combLeft, right);
 
         return EvaluateLambdas(combRight);
+    }*/
+
+    public static Theorem ApplyBinaryDefinition(Theorem definition, Term left, Term right)
+    {
+        return TryApplyBinaryDefinition(definition, left, right).ValueOrException();
+    }
+
+    public static Result<Theorem> TryApplyBinaryDefinition(Theorem definition, Term left, Term right)
+    {
+        if (!TryBinaryDeconstruct(definition, "=").Deconstruct(out var binaryTuple, out var error))
+            return "Definition is not a binary definition";
+
+        var (op, defn) = binaryTuple;
+        
+        var type = op.TypeOf();
+        
+        if (!type.TryDeconstructTyApp().Deconstruct(out var typeName, out var typeArgs, out error))
+            return "Definition is not a binary definition";
+        
+        if (typeName != "fun")
+            return "Definition is not a binary definition";
+        
+        var leftTemplateType = typeArgs[0];
+        
+        if (!typeArgs[1].TryDeconstructTyApp().Deconstruct(out typeName, out typeArgs, out error))
+            return "Definition is not a binary definition";
+        
+        if (typeName != "fun")
+            return "Definition is not a binary definition";
+        
+        var rightTemplateType = typeArgs[0];
+        
+        var leftType = left.TypeOf();
+        var rightType = right.TypeOf();
+
+        if (leftType != leftTemplateType || rightType != rightTemplateType)
+        {
+            var dict = new Dictionary<Type, Type>();
+            if (leftType != leftTemplateType && TryGenerateTypeMap(leftTemplateType, leftType, dict).IsError(out error))
+                return error;
+
+            if (rightType != rightTemplateType &&
+                TryGenerateTypeMap(rightTemplateType, rightType, dict).IsError(out error))
+                return error;
+            
+            definition = InstantiateTypes(dict, definition);
+        }
+        
+        var applied = Congruence(definition, left);
+        applied = Congruence(applied, right);
+        
+        var evaluated = EvaluateLambdas(BinaryRight(applied));
+        
+        return Transitivity(applied, evaluated);
     }
 }

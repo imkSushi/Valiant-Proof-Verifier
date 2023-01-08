@@ -43,4 +43,20 @@ public class PrettyPrinter : Printer
         
         return $"λ {string.Join(" ", paramList.Select(PrintTerm))}. {PrintTerm(abstraction)}";
     }
+    
+    /*public override string PrintComb(Term application, Term argument)
+    {
+        if (Kernel.IsComb(application))
+        {
+            var (app, arg) = Kernel.DeconstructComb(application);
+            if (Kernel.IsConst(app))
+            {
+                var (name, _) = Kernel.DeconstructConst(app);
+                if (_parser.TryGetInfixPrecedence(name).IsSuccess(out var precedence))
+                {
+                    
+                }
+            }
+        }
+    }*/
 }

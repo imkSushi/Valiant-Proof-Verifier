@@ -1,4 +1,5 @@
-﻿using ValiantProofVerifier;
+﻿using ValiantBasics;
+using ValiantProofVerifier;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
@@ -52,7 +53,7 @@ public static class AndTheorems
         var pand = Congruence(AndDefinition, pEqP); // /\ p = (\ p q . ((\f . f p q) = (\ f. f T T))) p
         var pandq = Congruence(pand, qEqQ); // /\ p q = (\ p q . ((\f . f p q) = (\ f. f T T))) p q
         var commutative = Commutativity(pandq);
-        var leftTerm = DeconstructTheorem(lambdaAbstraction2).conclusion;
+        var leftTerm = lambdaAbstraction2.Conclusion();
         var rightTerm = BinaryLeft(commutative);
         var eqiv = LambdaEquivalence(leftTerm, rightTerm);
         var elimination = ModusPonens(eqiv, lambdaAbstraction2);
@@ -67,7 +68,7 @@ public static class AndTheorems
         var pApp = Congruence(AndDefinition, Parse("p :bool"));
         var applied = Congruence(pApp, Parse("q :bool")); // p /\ q = (\f . f p q) = (\f . f T T)
         var appliedEliminated = ModusPonens(applied, assumption);
-        var rightSimp = EvaluateLambdas(DeconstructTheorem(appliedEliminated).conclusion);
+        var rightSimp = EvaluateLambdas(appliedEliminated.Conclusion());
         return ModusPonens(rightSimp, appliedEliminated); // p /\ q |- (\f . f p q) = (\f . f T T)
     }
 
@@ -95,12 +96,11 @@ public static class AndTheorems
     {
         var and = InstantiateVariables(new Dictionary<Term, Term>
         {
-            [Parse("p :bool")] = DeconstructTheorem(left).conclusion,
-            [Parse("q :bool")] = DeconstructTheorem(right).conclusion
+            [Parse("p :bool")] = left.Deconstruct().conclusion,
+            [Parse("q :bool")] = right.Deconstruct().conclusion
         }, And);
 
-        var eliminateP = Elimination(left, and);
-        return Elimination(right, eliminateP);
+        return Elimination(and, left, right);
     }
 
     public static (Theorem left, Theorem right) Deconjugate(Theorem theorem)
@@ -108,27 +108,46 @@ public static class AndTheorems
         return (DeconjugateLeft(theorem), DeconjugateRight(theorem));
     }
 
+    public static Result<Theorem, Theorem> TryDeconjugate(Theorem theorem)
+    {
+        return (TryDeconjugateLeft(theorem), TryDeconjugateRight(theorem));
+    }
+
     public static Theorem DeconjugateLeft(Theorem theorem)
     {
-        var (left, right, _) = BinaryDeconstruct(theorem);
+        return TryDeconjugateLeft(theorem).ValueOrException();
+    }
+
+    public static Result<Theorem> TryDeconjugateLeft(Theorem theorem)
+    {
+        if (!TryBinaryDeconstruct(theorem, @"/\").Deconstruct(out var left, out var right, out _))
+            return "Expected theorem to be an 'and' operation";
+
         var inst = InstantiateVariables(new Dictionary<Term, Term>
         {
             [Parse("p :bool")] = left,
             [Parse("q :bool")] = right
         }, AndLeft);
         
-        return Elimination(theorem, inst);
+        return Elimination(inst, theorem);
     }
-    
+
     public static Theorem DeconjugateRight(Theorem theorem)
     {
-        var (left, right, _) = BinaryDeconstruct(theorem);
+        return TryDeconjugateRight(theorem).ValueOrException();
+    }
+    
+    public static Result<Theorem> TryDeconjugateRight(Theorem theorem)
+    {
+        if (!TryBinaryDeconstruct(theorem, @"/\").Deconstruct(out var left, out var right, out _))
+            return "Expected theorem to be an 'and' operation";
+
         var inst = InstantiateVariables(new Dictionary<Term, Term>
         {
             [Parse("p :bool")] = left,
             [Parse("q :bool")] = right
         }, AndRight);
         
-        return Elimination(theorem, inst);
+        return Elimination(inst, theorem);
     }
 }
