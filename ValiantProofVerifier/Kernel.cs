@@ -230,7 +230,7 @@ public sealed class Kernel
         }
     }
 
-    private static IEnumerable<Term> FreesIn(Term term)
+    public static IEnumerable<Term> FreesIn(Term term)
     {
         return term switch
         {

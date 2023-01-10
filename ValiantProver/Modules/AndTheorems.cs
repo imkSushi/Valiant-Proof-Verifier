@@ -19,7 +19,7 @@ public static class AndTheorems
         TruthTheorems.Load();
         
         AndDefinition = NewBasicDefinition(Parse(@"""/\"" = \ p q . ((\f:fun :bool :fun :bool :bool . f p q) = (\ f. f T T))"));
-        Parser.TryRegisterInfixRule(@"/\", @"/\", 30, true);
+        TryRegisterInfixRule(@"/\", @"/\", 30, true, "∧");
         
         And = ConstructAnd();
         AndLeft = ConstructAndLeft();
@@ -34,9 +34,9 @@ public static class AndTheorems
     private static Theorem ConstructAnd()
     {
         //want p, q |- p /\ q
-        var f = Parser.ParseTerm("f :fun :bool :fun :bool :bool");
-        var p = Parser.ParseTerm("p :bool");
-        var q = Parser.ParseTerm("q :bool");
+        var f = Parse("f :fun :bool :fun :bool :bool");
+        var p = Parse("p :bool");
+        var q = Parse("q :bool");
         var pImpP = Assume(p); // p |- p
         var pEqP = Reflexivity(p); // p = p
         var qImpQ = Assume(q); // q |- q

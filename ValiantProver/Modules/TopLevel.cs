@@ -6,6 +6,6 @@ public static class TopLevel
 
     static TopLevel()
     {
-        ExistsTheorems.Load();
+        TautologyEvaluator.Load();
     }
 }

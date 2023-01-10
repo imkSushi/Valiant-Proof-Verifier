@@ -43,6 +43,30 @@ internal abstract record InfTerm
 
     internal abstract IEnumerable<(InfType, InfType)> GetMappings();
 
+    internal IEnumerable<(InfType, InfType)> GetAllMappings()
+    {
+        foreach (var mapping in GetMappings())
+        {
+            yield return mapping;
+        }
+
+        var frees = FreesIn().ToHashSet();
+        
+        var freeNames = frees.Select(f => f.Name).ToHashSet();
+        
+        foreach (var name in freeNames)
+        {
+            var types = frees.Where(f => f.Name == name).Select(f => f.Type).ToList();
+
+            var type0 = types[0];
+            
+            for (var i = 1; i < types.Count; i++)
+            {
+                yield return (type0, types[i]);
+            }
+        }
+    }
+
     internal abstract IEnumerable<InfType> GetAllMappingsOf(string boundVarName);
 
     internal abstract InfType TypeOf();
@@ -50,4 +74,6 @@ internal abstract record InfTerm
     internal abstract Result<InfTerm> FixCombTypes();
 
     internal abstract InfTerm ConvertTypeToFn(string oldName);
+
+    internal abstract IEnumerable<InfVar> FreesIn();
 }

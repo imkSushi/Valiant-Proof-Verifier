@@ -85,7 +85,8 @@ public sealed class Parser
             IdentifierToken { Value: var name } => (left => Combination(left, name), InfixPrecedence.Combination),
             KeywordToken("$")                   => (Escape, InfixPrecedence.Combination),
             KeywordToken("(")                   => (Grouping, InfixPrecedence.Combination),
-            KeywordToken {Value: var keyword} => !_suspendedKeywords.Contains(keyword) && _customInfixRules.TryGetValue(keyword, out var output) ? output : null,
+            KeywordToken {Value: var keyword} when _suspendedKeywords.Contains(keyword) => null,
+            KeywordToken {Value: var keyword} when _customInfixRules.TryGetValue(keyword, out var output) =>  output,
             _                                   => null
         };
     }
@@ -118,10 +119,71 @@ public sealed class Parser
 
             return Combination(leftCombination, rightTerm);
         }, (InfixPrecedence)precedence);
+
+        _customPrefixRules[keyword] = () => Identifier(keyword);
         return true;
     }
 
-    public bool RegisterLambdaRule(string keyword, string constant)
+    public bool TryRegisterPrefixRule(string keyword, string constant, int arity)
+    {
+        if (arity < 0)
+            return false;
+        
+        if (!_kernel.TryGetConstantType(constant, out var constantType))
+            return false;
+        
+        if (_customPrefixRules.ContainsKey(keyword))
+            return false;
+        
+        if (!_lexer.TryAddKeyword(keyword))
+            return false;
+        
+        _customPrefixRules[keyword] = delegate
+        {
+            if (!Identifier(constant).Deconstruct(out var app, out var error))
+                return error;
+            
+            for (var i = 0; i < arity; i++)
+            {
+                var startIndex = _index;
+
+                if (!ParsePrecedence(InfixPrecedence.Combination).IsSuccess(out var arg))
+                {
+                    _index = startIndex;
+
+                    return app;
+                }
+
+                if (!Combination(app, arg).IsSuccess(out var newApp))
+                {
+                    _index = startIndex;
+
+                    return app;
+                }
+                
+                app = newApp;
+            }
+            
+            return app;
+        };
+
+        _customInfixRules[keyword] = (delegate(InfTerm left)
+        {
+            if (!Identifier(constant).Deconstruct(out var app, out var error))
+                return error;
+
+            if (!ParsePrecedence(InfixPrecedence.Combination).Deconstruct(out var right, out error))
+                return error;
+            
+            if (!Combination(app, right).Deconstruct(out var rightCombination, out error))
+                return error;
+            
+            return Combination(left, rightCombination);
+        }, InfixPrecedence.Combination);
+        return true;
+    }
+
+    public bool TryRegisterLambdaRule(string keyword, string constant)
     {
         if (!_kernel.TryGetConstantType(constant, out var constantType))
             return false;
@@ -216,7 +278,7 @@ public sealed class Parser
     {
         return TryGetInfixRule(Current()).Deconstruct(out var output)
             ? output!.Value.precedence
-            : InfixPrecedence.None;
+            : (InfixPrecedence.None);
     }
 
     private Token Current()
@@ -330,6 +392,9 @@ public sealed class Parser
         var variables = new List<InfVar>();
         string? error;
         _index++;
+        
+        var startIndex = _index;
+        
         while (Current() is IdentifierToken { Value: var name })
         {
             _index++;
@@ -340,13 +405,22 @@ public sealed class Parser
         }
         
         if (variables.Count == 0)
-            return "Expected at least one variable in lambda expression";
-        
-        if (!variables.Select(v => v.Name).Unique())
-            return "Duplicate variable names in lambda expression";
-        
+        {
+            if (modifier == null) 
+                return "Expected at least one variable in lambda expression";
+            
+            _index = startIndex;
+            return modifier;
+        }
+
         if (!MatchKeyword("."))
-            return $"Expected '.', got {Current()}";
+        {
+            if (modifier == null)
+                return $"Expected '.', got {Current()}";
+            
+            _index = startIndex;
+            return modifier;
+        }
 
         if (!Expression().Deconstruct(out var body, out error))
             return error;

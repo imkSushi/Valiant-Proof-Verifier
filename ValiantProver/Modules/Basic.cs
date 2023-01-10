@@ -14,7 +14,7 @@ public static class Basic
     {
         TypeUtilities.Load();
 
-        Parser.TryRegisterInfixRule("=", "=", 0, true);
+        TryRegisterInfixRule("=", "=", 0, true, "=");
     }
 
     public static Theorem Congruence(Theorem application, Term argument)
@@ -255,37 +255,28 @@ public static class Basic
         return Result.Success;
     }
 
-    public static string GetFreeVariableName(Term term)
+    public static string GetFreeVariableName(Term term, string preferred = "")
     {
-        var nameGen = new NewNameTypeGenerator();
-        var name = nameGen.Next();
-        var usedNames = UsedNames(term);
-        while (usedNames.Contains(name))
-        {
-            name = nameGen.Next();
-        }
-        
-        return name;
+        return GetFreeVariableName(new[] { term }, preferred);
     }
 
-    public static string GetFreeVariableName(Theorem theorem)
+    public static string GetFreeVariableName(Theorem theorem, string preferred = "")
     {
-        var nameGen = new NewNameTypeGenerator();
-        var name = nameGen.Next();
-        var usedNames = UsedNames(theorem);
-        while (usedNames.Contains(name))
-        {
-            name = nameGen.Next();
-        }
-        
-        return name;
+        return GetFreeVariableName(theorem.Premises().Append(theorem.Conclusion()).ToArray(), preferred);
     }
 
-    public static string GetFreeVariableName(Term[] terms)
+    public static string GetFreeVariableName(Term[] terms, string preferred = "")
     {
+        return GetFreeVariableName(UsedNames(terms), preferred);
+    }
+    
+    public static string GetFreeVariableName(HashSet<string> usedNames, string preferred = "")
+    {
+        if (preferred != "" && !usedNames.Contains(preferred))
+            return preferred;
+        
         var nameGen = new NewNameTypeGenerator();
         var name = nameGen.Next();
-        var usedNames = UsedNames(terms);
         while (usedNames.Contains(name))
         {
             name = nameGen.Next();

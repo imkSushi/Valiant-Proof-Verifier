@@ -18,7 +18,7 @@ public static class ImpliesTheorems
         AndTheorems.Load();
         
         ImpliesDefinition = NewBasicDefinition(Parse(@"-> = \ p q . p /\ q = p"));
-        Parser.TryRegisterInfixRule("->", "->", 45, true);
+        TryRegisterInfixRule("->", "->", 45, true, "→");
         
         ImpliesModusPonens = ConstructImpliesModusPonens();
         ImpliesAssumption = ConstructImpliesAssumption();
@@ -26,9 +26,9 @@ public static class ImpliesTheorems
     }
     
     public static Theorem ImpliesDefinition { get; }
-    public static Theorem ImpliesModusPonens { get; }
-    public static Theorem ImpliesAssumption { get; }
-    public static Theorem ImpliesItself { get; }
+    public static Theorem ImpliesModusPonens { get; } // p, p -> q |- q
+    public static Theorem ImpliesAssumption { get; } // q |- p -> q
+    public static Theorem ImpliesItself { get; } // |- p -> p
 
     private static Theorem ConstructImpliesAssumption()
     {
@@ -45,7 +45,7 @@ public static class ImpliesTheorems
         return ModusPonens(commutedImplies, antiSymmetry); // q |- p -> q
     }
     
-    public static Theorem AddImpliesAssumption(Theorem theorem, Term assumption)
+    public static Theorem AddImpliesAssumption(Theorem theorem, Term assumption) // |- p & q goes to |- p -> q
     {
         var inst = InstantiateVariables(new Dictionary<Term, Term>
         {
@@ -68,12 +68,13 @@ public static class ImpliesTheorems
         // p |- q goes to |- p -> q
         var thmConclusion = theorem.Deconstruct().conclusion;
         var p = Parse("p :bool");
-        var implies = ApplyBinaryDefinition(ImpliesDefinition, Parse("p :bool"), Parse("q :bool")); // p -> q = (p /\ q = p)
+        var q = Parse("q :bool");
+        var implies = ApplyBinaryDefinition(ImpliesDefinition, p, q); // p -> q = (p /\ q = p)
         var commutedImplies = Commutativity(implies); // (p /\ q = p) = p -> q
         var inst = InstantiateVariables(new Dictionary<Term, Term>
         {
-            [Parse("p :bool")] = premise,
-            [Parse("q :bool")] = thmConclusion
+            [p] = premise,
+            [q] = thmConclusion
         }, commutedImplies); // (p /\ q = p) = p -> q
 
         var pImpPAndQ = Conjugate(Assume(premise), theorem); // p |- p /\ q
@@ -104,12 +105,12 @@ public static class ImpliesTheorems
         return ApplyModusPonens(theorem, assumption); // p |- q
     }
 
-    public static Theorem ApplyAntiSymmetry(Theorem left, Theorem right)
+    public static Theorem ApplyAntiSymmetry(Theorem left, Theorem right) // |- p -> q and |- q -> p goes to |- p = q
     {
-        var leftNormal = Undischarge(left);
-        var rightNormal = Undischarge(right);
+        var leftNormal = Undischarge(left); // p |- q
+        var rightNormal = Undischarge(right); // q |- p
 
-        return AntiSymmetry(leftNormal, rightNormal);
+        return AntiSymmetry(rightNormal, leftNormal); // |- p = q
     }
     
     public static Result<Theorem> TryApplyAntiSymmetry(Theorem left, Theorem right)
@@ -260,7 +261,7 @@ public static class ImpliesTheorems
         return SelfImplication(term);
     }
 
-    public static Theorem GivenTheoremImpliesAnythingThenAnything(Theorem theorem, Term term) // p and t goes to t -> p |- p
+    public static Theorem GivenTheoremImpliesAnythingThenAnything(Theorem theorem, Term term) // p and |- t goes to t -> p |- p
     {
         var conclusion = theorem.Deconstruct().conclusion; // t
         var implication = ApplyBinaryFunction("->", conclusion, term); // t -> p 

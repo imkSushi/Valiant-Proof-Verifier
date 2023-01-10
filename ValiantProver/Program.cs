@@ -6,10 +6,9 @@ using ValiantProver.Modules;
 using static ValiantProver.Modules.ImpliesTheorems;
 
 var kernel = new Kernel();
-var parser = Theory.Parser;
+var parser = Theory.GetParser();
 
-var printer = new PrettyPrinter.PrettyPrinter(parser, kernel);
-//printer.Activate();
+//new PrettyPrinter.DetailedPrinter().Activate();
 
 TopLevel.Load();
 
@@ -20,12 +19,17 @@ var qImpP = AddImpliesAssumption(p, parser.ParseTerm("q :bool"));
 var pImpQImpP = Discharge(parser.ParseTerm("p :bool"), qImpP);
 
 var generalise = ForAllTheorems.Generalise(Theory.Reflexivity(parser.ParseTerm("p")), parser.ParseTerm("p"));
-//new PrettyPrinter.DetailedPrinter().Activate();
 
 var exists = ExistsTheorems.Exists(parser.ParseTerm(@"\p :bool . p"), TruthTheorems.Truth);
 
 var exists2 = ExistsTheorems.Exists(parser.ParseTerm(@"\p . ! q . q -> p"), ForAllTheorems.Generalise(AddImpliesAssumption(TruthTheorems.Truth, parser.ParseTerm("q: bool")), parser.ParseTerm("q :bool")));
 
+var tautTest = TautologyEvaluator.Tautology(parser.ParseTerm("p -> (q -> p)"));
+
+var printerTest = parser.ParseTerm(@"! p q . ? f . @ f p = @ f q");
+
 Console.WriteLine(pImpQImpP);
 Console.WriteLine(exists);
 Console.WriteLine(exists2);
+Console.WriteLine(tautTest);
+Console.WriteLine(printerTest);

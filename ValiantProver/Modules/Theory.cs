@@ -9,13 +9,18 @@ public static class Theory
 {
     public static void Load() { }
     private static Kernel Kernel { get; }
-    public static Parser Parser { get; }
+    private static Parser Parser { get; }
+    public static PrettyPrinter.PrettyPrinter Printer { get; }
 
     static Theory()
     {
         Kernel = new Kernel();
         Parser = new Parser(Kernel);
+        Printer = new PrettyPrinter.PrettyPrinter(Parser, Kernel);
+        Printer.Activate();
     }
+
+    public static Parser GetParser() => Parser;
     
     public static Term Parse(string term)
     {
@@ -26,7 +31,40 @@ public static class Theory
     {
         return Parser.TryParseTerm(term);
     }
+
+    public static bool TryRegisterInfixRule(string keyword, string constant, int precedence, bool leftAssociative, string display)
+    {
+        if (!Parser.TryRegisterInfixRule(keyword, constant, precedence, leftAssociative)) 
+            return false;
+        
+        Printer.TryRegisterInfix(constant, display);
+        return true;
+    }
     
+    public static bool TryRegisterPrefixRule(string keyword, string constant, int arity, string display)
+    {
+        if (!Parser.TryRegisterPrefixRule(keyword, constant, arity)) 
+            return false;
+        
+        Printer.TryRegisterPrefix(constant, display);
+        return true;
+    }
+
+    
+    public static bool TryRegisterLambdaRule(string keyword, string constant, string display)
+    {
+        if (!Parser.TryRegisterLambdaRule(keyword, constant)) 
+            return false;
+        
+        Printer.TryRegisterLambda(constant, display);
+        return true;
+    }
+    
+    public static bool TryRegisterConst(string constant, string display)
+    {
+        return Printer.TryRegisterConst(constant, display);
+    }
+
     public static Type BoolTy => Kernel.BoolTy;
     public static Type Aty => Kernel.Aty;
 
@@ -148,6 +186,11 @@ public static class Theory
         {
             return e.Message;
         }
+    }
+    
+    public static IEnumerable<Term> FreesIn(this Term term)
+    {
+        return Kernel.FreesIn(term);
     }
 
     public static Theorem AntiSymmetry(Theorem left, Theorem right)

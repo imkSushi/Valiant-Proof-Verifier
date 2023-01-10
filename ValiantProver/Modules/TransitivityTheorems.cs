@@ -23,8 +23,8 @@ public static class TransitivityTheorems
 
     private static Theorem ConstructTransitivity()
     {
-        var pq = Assume(Parser.ParseTerm("p 'a = q")); // |- p = q
-        var qr = Assume(Parser.ParseTerm("q 'a = r")); // |- q = r
+        var pq = Assume(Parse("p 'a = q")); // |- p = q
+        var qr = Assume(Parse("q 'a = r")); // |- q = r
 
         var dummyVariable = Parse("x 'a"); // x
 

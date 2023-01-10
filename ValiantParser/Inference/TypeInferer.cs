@@ -9,7 +9,7 @@ internal class TypeInferer
         if (!input.FixCombTypes().Deconstruct(out var fixedCombInput, out var error))
             return error;
         var uniqueTerm = fixedCombInput.MakeUnboundTypeNamesUnique();
-        var mappings = uniqueTerm.GetMappings().ToHashSet();
+        var mappings = uniqueTerm.GetAllMappings().ToHashSet();
 
         while (mappings.Any())
         {

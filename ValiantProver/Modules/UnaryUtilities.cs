@@ -4,6 +4,7 @@ using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.LambdaEvaluator;
 using static ValiantProver.Modules.Theory;
+using static ValiantProver.Modules.TransitivityTheorems;
 
 namespace ValiantProver.Modules;
 
@@ -158,7 +159,9 @@ public static class UnaryUtilities
             definition = InstantiateTypes(GenerateTypeMap(templateArgType, argType), definition);
         }
 
-        return EvaluateLambdas(Congruence(definition, arg));
+        var outputThm = Congruence(definition, arg);
+
+        return Transitivity(outputThm, EvaluateLambdas(BinaryRight(outputThm)));
     }
     
     public static Result<Theorem> TryApplyUnaryDefinition(Theorem definition, Term arg)

@@ -14,22 +14,35 @@ public static class CommutativityTheorems
     {
         Basic.Load();
         CommutativityTheorem = ConstructCommutativity();
+        CommutativeEqualityTheorem = ConstructCommutativeEquality();
     }
     
     public static Theorem CommutativityTheorem { get; }
+    public static Theorem CommutativeEqualityTheorem { get; }
 
     private static Theorem ConstructCommutativity()
     {
-        var pEqQ = Assume(Parser.ParseTerm("p 'a = q"));
+        var pEqQ = Assume(Parse("p 'a = q"));
 
-        var pEqP = Reflexivity(Parser.ParseTerm("p 'a"));
+        var pEqP = Reflexivity(Parse("p 'a"));
 
-        var eq = Parser.ParseTerm("\"=\" :fun 'a :fun 'a :bool");
+        var eq = Parse("= :fun 'a :fun 'a :bool");
 
         var pxEqQx = Congruence(eq, pEqQ);
         var ppEqQp = Congruence(pxEqQx, pEqP);
         
         return ModusPonens(ppEqQp, pEqP);
+    }
+    
+    private static Theorem ConstructCommutativeEquality() // |- (p = q) = (q = p)
+    {
+        var pEqQ = Assume(Parse("p 'a = q")); // p = q |- p = q
+        var qEqPComm = Commutativity(pEqQ); // p = q |- q = p
+        
+        var qEqP = Assume(Parse("q 'a = p")); // q = p |- q = p
+        var pEqQComm = Commutativity(qEqP); // q = p |- p = q
+
+        return AntiSymmetry(pEqQComm, qEqPComm);
     }
 
     public static Theorem IncreaseBeta(Theorem thm, Term variable) // t & x
@@ -66,18 +79,27 @@ public static class CommutativityTheorems
         return Elimination(commutativity, theorem);
     }
 
-    public static Theorem CommutativityEquality(Term term)
+    public static Theorem CommutativityEquality(Term left, Term right)
     {
-        return TryCommutativityEquality(term).ValueOrException();
+        var type = left.TypeOf();
+        
+        var typedCommutativeEquality = InstantiateTypes(new Dictionary<Type, Type>
+        {
+            [MakeType("a")] = type
+        }, CommutativeEqualityTheorem);
+
+        return InstantiateVariables(new Dictionary<Term, Term>
+        {
+            [MakeVariable("p", type)] = left,
+            [MakeVariable("q", type)] = right
+        }, typedCommutativeEquality);
     }
 
-    public static Result<Theorem> TryCommutativityEquality(Term term)
+    public static Result<Theorem> TryCommutativityEquality(Term left, Term right)
     {
-        var assumption = Assume(term);
-        if (!TryCommutativity(assumption).Deconstruct(out var commutativity, out var error))
-            return error;
-        var oppositeAssumption = Assume(commutativity.Deconstruct().conclusion);
-        var oppositeCommutativity = Commutativity(oppositeAssumption);
-        return AntiSymmetry(oppositeCommutativity, commutativity);
+        if (left.TypeOf() != right.TypeOf())
+            return "Expected two terms of the same type";
+
+        return CommutativityEquality(left, right);
     }
 }

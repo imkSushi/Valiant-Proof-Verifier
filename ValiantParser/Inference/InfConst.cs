@@ -54,6 +54,11 @@ internal record InfConst(string Name, InfType Type) : InfTerm
         return new InfConst(Name, Type.ConvertTypeToFn(oldName));
     }
 
+    internal override IEnumerable<InfVar> FreesIn()
+    {
+        yield break;
+    }
+
     public override string ToString()
     {
         return $"{Name}:{Type}";

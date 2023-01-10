@@ -75,6 +75,11 @@ internal record InfComb : InfTerm
         return new InfComb(Application.ConvertTypeToFn(oldName), Argument);
     }
 
+    internal override IEnumerable<InfVar> FreesIn()
+    {
+        return Application.FreesIn().Concat(Argument.FreesIn());
+    }
+
     public InfTerm Application { get; init; }
     public InfTerm Argument { get; init; }
     public void Deconstruct(out InfTerm application, out InfTerm argument)

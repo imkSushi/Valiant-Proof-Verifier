@@ -43,7 +43,7 @@ public static class EtaReductionTheorems
 
         var fName = GetFreeVariableName(term);
         
-        var customEta = CustomEtaReduction(paramName, fName, abstraction.TypeOf()); // (\ y . f y) = f
+        var customEta = CustomEtaReduction(paramName, fName, g.TypeOf()); // (\ y . f y) = f
 
         return InstantiateVariables(new Dictionary<Term, Term>
         {

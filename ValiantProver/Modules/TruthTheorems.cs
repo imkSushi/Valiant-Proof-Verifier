@@ -12,7 +12,9 @@ public static class TruthTheorems
     {
         CommutativityTheorems.Load();
         
-        TruthDefinition = NewBasicDefinition(Parser.ParseTerm(@"T = ((\ a: bool . a) = (\ a: bool . a))"));
+        TruthDefinition = NewBasicDefinition(Parse(@"T = ((\ a: bool . a) = (\ a: bool . a))"));
+        TryRegisterConst("T", "⊤");
+        
         Truth = ConstructTruth();
     }
     public static Theorem TruthDefinition { get; }
@@ -20,7 +22,7 @@ public static class TruthTheorems
 
     private static Theorem ConstructTruth()
     {
-        var a = Parser.ParseTerm(@"\a: bool . a");
+        var a = Parse(@"\a: bool . a");
         var equality = Reflexivity(a);
         var commutativity = Commutativity(TruthDefinition);
         return ModusPonens(commutativity, equality);

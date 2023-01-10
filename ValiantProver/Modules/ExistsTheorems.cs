@@ -21,7 +21,7 @@ public static class ExistsTheorems
         ForAllTheorems.Load();
         
         ExistsDefinition = NewBasicDefinition(Parse(@"? = \p . !q . (!x . p x -> q) -> q")); //:fun :fun 'a :bool    :bool
-        Parser.RegisterLambdaRule("?", "?");
+        TryRegisterLambdaRule("?", "?", "∃");
         
         ExistsWitnessTheorem = ConstructExistsWitnessTheorem();
     }
@@ -138,7 +138,7 @@ public static class ExistsTheorems
 
         var pName = GetFreeVariableName(new []{existsLambda, witness.Conclusion(), q});
         
-        var existsEq = LambdaEquivalence(ExistsDefinition.Conclusion(), Parse(@$"""?"" = \{pName} . !{qName} . (!{param} . {pName} {param} -> {qName}) -> {qName}"));
+        var existsEq = LambdaEquivalence(ExistsDefinition.Conclusion(), Parse(@$"(?) = \{pName} . !{qName} . (!{param} . {pName} {param} -> {qName}) -> {qName}"));
         var existsDefinition = ModusPonens(existsEq, ExistsDefinition); // |- ? x . f x = \x . f x
         var wtp = ApplyUnaryDefinition(existsDefinition, existsLambda); // |- ? x . f x = ...
         return ModusPonens(Commutativity(wtp), generalised);

@@ -12,5 +12,10 @@ And             <- LambdaEval,      Truth
 ForAll          <- Unary,           Truth
 Implies         <- And
 Exists          <- Implies,         ForAll
+Or              <- Implies,         ForAll
+False & Not     <- Or
+ExistsUnique    <- Exists
+Selector        <- ExistsUnique,    False & Not
+TautologyEval   <- Selector
 
-TopLevel        <- Exists
+TopLevel        <-TautologyEval

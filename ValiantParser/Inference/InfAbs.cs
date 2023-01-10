@@ -58,6 +58,11 @@ internal record InfAbs(InfVar Parameter, InfTerm Abstraction) : InfTerm
         return new InfAbs(Parameter.ConvertTypeToFn(oldName), Abstraction.ConvertTypeToFn(oldName));
     }
 
+    internal override IEnumerable<InfVar> FreesIn()
+    {
+        return Abstraction.FreesIn().Where(free => free.Name != Parameter.Name);
+    }
+
     public override string ToString()
     {
         return $"(λ{Parameter.Name}.{Abstraction})";
