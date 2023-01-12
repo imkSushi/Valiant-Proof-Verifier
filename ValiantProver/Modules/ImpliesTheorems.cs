@@ -1,9 +1,11 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.AndTheorems;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
+using static ValiantProver.Modules.ForAllTheorems;
 using static ValiantProver.Modules.LambdaEvaluator;
 using static ValiantProver.Modules.Theory;
 
@@ -16,9 +18,10 @@ public static class ImpliesTheorems
     static ImpliesTheorems()
     {
         AndTheorems.Load();
+        ForAllTheorems.Load();
         
-        ImpliesDefinition = NewBasicDefinition(Parse(@"-> = \ p q . p /\ q = p"));
         TryRegisterInfixRule("->", "->", 45, true, "→");
+        ImpliesDefinition = NewDefinition(Parse(@"p -> q = (p /\ q = p)"));
         
         ImpliesModusPonens = ConstructImpliesModusPonens();
         ImpliesAssumption = ConstructImpliesAssumption();
@@ -29,13 +32,14 @@ public static class ImpliesTheorems
     public static Theorem ImpliesModusPonens { get; } // p, p -> q |- q
     public static Theorem ImpliesAssumption { get; } // q |- p -> q
     public static Theorem ImpliesItself { get; } // |- p -> p
+    public static Theorem AnythingDoubleImpliesEliminationTheorem { get; } // |- ((p -> q) -> q) = q
 
     private static Theorem ConstructImpliesAssumption()
     {
         //want: q |- p -> q
         var p = Parse("p :bool");
         var q = Parse("q :bool");
-        var implies = ApplyBinaryDefinition(ImpliesDefinition, p, q); // p -> q = (p /\ q = p)
+        var implies = Specialise(ImpliesDefinition, p, q); // p -> q = (p /\ q = p)
         var commutedImplies = Commutativity(implies); // q -> p = (p /\ q = p)
         
         var pQImpPAndQ = Conjugate(Assume(p), Assume(q)); // p, q |- p /\ q
@@ -69,7 +73,7 @@ public static class ImpliesTheorems
         var thmConclusion = theorem.Deconstruct().conclusion;
         var p = Parse("p :bool");
         var q = Parse("q :bool");
-        var implies = ApplyBinaryDefinition(ImpliesDefinition, p, q); // p -> q = (p /\ q = p)
+        var implies = Specialise(ImpliesDefinition, p, q); // p -> q = (p /\ q = p)
         var commutedImplies = Commutativity(implies); // (p /\ q = p) = p -> q
         var inst = InstantiateVariables(new Dictionary<Term, Term>
         {
@@ -93,7 +97,7 @@ public static class ImpliesTheorems
 
     public static Theorem Undischarge(Theorem theorem)
     {
-        return TryUndischarge(theorem).ValueOrException();
+        return (Theorem) TryUndischarge(theorem);
     }
     
     public static Result<Theorem> TryUndischarge(Theorem theorem)
@@ -142,7 +146,7 @@ public static class ImpliesTheorems
 
     public static Theorem DeconstructEqualityToImplies(Theorem theorem)
     {
-        return TryDeconstructEqualityToImplies(theorem).ValueOrException();
+        return (Theorem) TryDeconstructEqualityToImplies(theorem);
     }
     
     public static Result<Theorem> TryDeconstructEqualityToImplies(Theorem theorem)
@@ -158,7 +162,7 @@ public static class ImpliesTheorems
 
     public static (Theorem left, Theorem right) FullyDeconstructEqualityToImplies(Theorem theorem)
     {
-        return TryFullyDeconstructEqualityToImplies(theorem).ValueOrException();
+        return ((Theorem left, Theorem right)) TryFullyDeconstructEqualityToImplies(theorem);
     }
     
     public static Result<Theorem, Theorem> TryFullyDeconstructEqualityToImplies(Theorem theorem)
@@ -174,7 +178,7 @@ public static class ImpliesTheorems
 
     public static Theorem ImpliesTransitivity(Theorem left, Theorem right)
     {
-        return TryImpliesTransitivity(left, right).ValueOrException();
+        return (Theorem) TryImpliesTransitivity(left, right);
     }
     
     public static Result<Theorem> TryImpliesTransitivity(Theorem left, Theorem right)
@@ -225,7 +229,7 @@ public static class ImpliesTheorems
     {
         //want: p, p -> q |- q
         
-        var simp = ApplyBinaryDefinition(ImpliesDefinition, Parse("p :bool"), Parse("q :bool")); // p -> q = (p /\ q = p)
+        var simp = Specialise(ImpliesDefinition, Parse("p :bool"), Parse("q :bool")); // p -> q = (p /\ q = p)
         var major = Assume(Parse("p -> q")); // p -> q |- p -> q
         var minor = Assume(Parse("p :bool")); // p |- p
         var and = ModusPonens(simp, major); // p -> q |- p /\ q = p
@@ -238,14 +242,14 @@ public static class ImpliesTheorems
     {
         var p = Parse("p :bool");
         var assumeP = Assume(p);
-        var applied = ApplyBinaryDefinition(ImpliesDefinition, p, p); // p -> p = (p /\ p = p)
+        var applied = Specialise(ImpliesDefinition, p, p); // p -> p = (p /\ p = p)
         var pImpPAndP = Conjugate(assumeP, assumeP); // p |- p /\ p
         var pAndPImpP = DeconjugateLeft(Assume(Parse(@"p /\ p"))); // p /\ p |- p
         var antiSym = AntiSymmetry(pImpPAndP, pAndPImpP); // |- p /\ p = p
         return ModusPonens(Commutativity(applied), antiSym);
     }
 
-    public static Theorem SelfImplication(Term term)
+    public static Theorem SelfImplication(Term term) // |- p -> p
     {
         return InstantiateVariables(new Dictionary<Term, Term>
         {

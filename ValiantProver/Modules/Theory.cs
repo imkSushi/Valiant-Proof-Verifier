@@ -2,6 +2,7 @@
 using ValiantBasics;
 using ValiantParser;
 using ValiantProofVerifier;
+using ValiantResults;
 
 namespace ValiantProver.Modules;
 
@@ -40,6 +41,12 @@ public static class Theory
         Printer.TryRegisterInfix(constant, display);
         return true;
     }
+
+    public static void RegisterInfixRule(string keyword, string constant, int precedence, bool leftAssociative, string display)
+    {
+        if (!TryRegisterInfixRule(keyword, constant, precedence, leftAssociative, display))
+            throw new ArgumentException($"Infix rule {keyword} already registered");
+    }
     
     public static bool TryRegisterPrefixRule(string keyword, string constant, int arity, string display)
     {
@@ -49,7 +56,12 @@ public static class Theory
         Printer.TryRegisterPrefix(constant, display);
         return true;
     }
-
+    
+    public static void RegisterPrefixRule(string keyword, string constant, int arity, string display)
+    {
+        if (!TryRegisterPrefixRule(keyword, constant, arity, display))
+            throw new ArgumentException($"Prefix rule {keyword} already registered");
+    }
     
     public static bool TryRegisterLambdaRule(string keyword, string constant, string display)
     {
@@ -60,9 +72,76 @@ public static class Theory
         return true;
     }
     
+    public static void RegisterLambdaRule(string keyword, string constant, string display)
+    {
+        if (!TryRegisterLambdaRule(keyword, constant, display))
+            throw new ArgumentException($"Lambda rule {keyword} already registered");
+    }
+    
     public static bool TryRegisterConst(string constant, string display)
     {
         return Printer.TryRegisterConst(constant, display);
+    }
+    
+    public static void RegisterConst(string constant, string display)
+    {
+        if (!TryRegisterConst(constant, display))
+            throw new ArgumentException($"Constant {constant} already registered");
+    }
+    
+    public static bool TryAddTokenMacro(string name, string value)
+    {
+        return Parser.TryAddTokenMacro(name, value).IsSuccess();
+    }
+    
+    public static void AddTokenMacro(string name, string value)
+    {
+        if (!TryAddTokenMacro(name, value))
+            throw new ArgumentException($"Token macro {name} already registered");
+    }
+
+    public static bool TryAddUntypedTermMacro(string name, string value)
+    {
+        return Parser.TryAddUntypedTermMacro(name, value).IsSuccess();
+    }
+    
+    public static void AddUntypedTermMacro(string name, string value)
+    {
+        if (!TryAddUntypedTermMacro(name, value))
+            throw new ArgumentException($"Untyped term macro {name} already registered");
+    }
+    
+    public static bool TryAddTypedTermMacro(string name, string value)
+    {
+        return Parser.TryAddTypedTermMacro(name, value).IsSuccess();
+    }
+    
+    public static void AddTypedTermMacro(string name, string value)
+    {
+        if (!TryAddTypedTermMacro(name, value))
+            throw new ArgumentException($"Typed term macro {name} already registered");
+    }
+    
+    public static bool TryAddTypedTermMacro(string name, Term term)
+    {
+        return Parser.TryAddTypedTermMacro(name, term).IsSuccess();
+    }
+    
+    public static void AddTypedTermMacro(string name, Term term)
+    {
+        if (!TryAddTypedTermMacro(name, term))
+            throw new ArgumentException($"Typed term macro {name} already registered");
+    }
+
+    public static bool TryRemoveMacro(string name)
+    {
+        return Parser.TryRemoveMacro(name).IsSuccess();
+    }
+
+    public static void RemoveMacro(string name)
+    {
+        if (!TryRemoveMacro(name))
+            throw new ArgumentException($"Macro {name} not registered");
     }
 
     public static Type BoolTy => Kernel.BoolTy;
@@ -415,7 +494,7 @@ public static class Theory
 
     public static Type[] DeconstructTyApp(this Type type, string expectedName)
     {
-        return type.TryDeconstructTyApp(expectedName).ValueOrException();
+        return (Type[]) type.TryDeconstructTyApp(expectedName);
     }
     
     public static Result<string, Type[]> TryDeconstructTyApp(this Type type) // name & args

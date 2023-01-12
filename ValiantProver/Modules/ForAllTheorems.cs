@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
@@ -25,10 +26,12 @@ public static class ForAllTheorems
         TryRegisterLambdaRule("!", "!", "∀");
 
         AllApplicationsImpliesEqualityTheorem = ConstructAllApplicationsImpliesEqualityTheorem();
+        ForAllIndependentOfVariableTheorem = ConstructIndependentOfVariableTheorem();
     }
     
     public static Theorem ForAllDefinition { get; }
     public static Theorem AllApplicationsImpliesEqualityTheorem { get; } // !x . f x = g x |- f = g
+    public static Theorem ForAllIndependentOfVariableTheorem { get; } // |- !t . (!x . t) = t
 
     private static Theorem ConstructAllApplicationsImpliesEqualityTheorem()
     {
@@ -44,12 +47,28 @@ public static class ForAllTheorems
         return Transitivity(Commutativity(etaF), transitivity); // !x . f x = g x |- f = g
     }
 
-    public static Theorem Specialise(Theorem theorem, Term term) //! (x . t x) and y goes to t y
+    private static Theorem ConstructIndependentOfVariableTheorem() // |- !t . (!x . t) = t
     {
-        return TrySpecialise(theorem, term).ValueOrException();
+        var t = Parse("t :bool");
+        var x = Parse("x 'a");
+
+        var assumeT = Assume(t); // t |- t
+        var genT = Generalise(assumeT, x); // t |- !x . t
+        
+        var assumeGenT = Assume(genT.Conclusion()); // !x . t |- !x . t
+        var specT = Specialise(assumeGenT, x); // !x . t |- t
+
+        var thm = AntiSymmetry(genT, specT); // |- (!x . t) = t
+
+        return Generalise(thm, t); // |- ! t . (!x . t) = t
     }
 
-    public static Result<Theorem> TrySpecialise(Theorem theorem, Term term)
+    private static Theorem Specialise(Theorem theorem, Term term) //! (x . t x) and y goes to t y
+    {
+        return (Theorem) TrySpecialise(theorem, term);
+    }
+
+    private static Result<Theorem> TrySpecialise(Theorem theorem, Term term)
     {
         if (!TryUnaryDeconstruct(theorem, "!").Deconstruct(out var lambda, out _)) // \x . t x
             return "Expected theorem to be of the form \"! (x . t x)\"";
@@ -75,27 +94,94 @@ public static class ForAllTheorems
         return ModusPonens(commuted, Truth); // t y
     }
 
-    public static Theorem Specialise(Theorem theorem, Term[] parameters)
+    public static Theorem Specialise(Theorem theorem, params Term[] parameters)
     {
-        return parameters.Aggregate(theorem, Specialise);
+        return (Theorem) TrySpecialise(theorem, parameters);
     }
     
-    public static Result<Theorem> TrySpecialise(Theorem theorem, Term[] parameters)
+    public static Result<Theorem> TrySpecialise(Theorem theorem, params Term[] parameters)
     {
-        var output = theorem;
+        var parameterFreesList = parameters.Select(p => p.FreesIn().Select(variable => variable.DeconstructVar().name).ToList()).ToList();
+        if (!GetForAllTheoremParamNames(theorem.Conclusion(), parameters.Length).Deconstruct(out var theoremParams, out var error))
+            return error;
+
+        var substitutionNeeded = false;
         
-        foreach (var parameter in parameters)
+        var issueParams = new HashSet<string>();
+        var instParams = new List<string>();
+
+        var allUsed = UsedNames(theorem).Union(UsedNames(parameters)).ToHashSet();
+        
+        for (var i = 0; i < theoremParams.Count; i++)
         {
-            if (!TrySpecialise(theorem, parameter).Deconstruct(out var newThm, out var error))
-                return error;
+            var (name, _) = theoremParams[i].DeconstructVar();
+
+            if (!issueParams.Contains(name))
+            {
+                issueParams.UnionWith(parameterFreesList[i]);
+                instParams.Add(name);
+                continue;
+            }
             
-            output = newThm;
+            substitutionNeeded = true;
+            var newName = GetFreeVariableName(allUsed);
+            allUsed.Add(newName);
+            
+            instParams.Add(newName);
+            
+            issueParams.UnionWith(parameterFreesList[i]);
         }
         
+        if (!substitutionNeeded)
+            return SafeSpecialise(theorem, parameters);
+        
+        var typedInstParams = instParams.Select((name, index) => MakeVariable(name, parameters[index].TypeOf())).ToArray();
+        
+        if (!SafeSpecialise(theorem, typedInstParams).Deconstruct(out var inst, out error))
+            return error;
+        
+        var instDict = typedInstParams.Zip(parameters).ToDictionary(kv => kv.First, kv => kv.Second);
+        
+        return TryInstantiateVariables(instDict, inst);
+    }
+
+    private static Result<Theorem> SafeSpecialise(Theorem theorem, Term[] parameters)
+    {
+        var output = theorem;
+
+        for (var index = 0; index < parameters.Length; index++)
+        {
+            var parameter = parameters[index];
+            if (!TrySpecialise(output, parameter).Deconstruct(out var newThm, out var error))
+                return error;
+
+            output = newThm;
+        }
+
         return output;
     }
 
-    public static Theorem Generalise(Theorem theorem, Term variable)
+    private static Result<List<Term>> GetForAllTheoremParamNames(Term term, int depth)
+    {
+        var vars = new List<Term>();
+        
+        for (var i = 0; i < depth; i++)
+        {
+            if (!TryUnaryDeconstruct(term, "!").Deconstruct(out var lambda, out var error)) 
+                return error;
+
+            if (!lambda.TryDeconstructAbs().Deconstruct(out var param, out var abs, out error))
+                return error;
+
+            vars.Add(param);
+
+            term = abs;
+        }
+        
+        return vars;
+    }
+
+    private static Theorem Generalise(Theorem theorem, Term variable)
     {
         var antisymmetry = AntiSymmetry(theorem, Truth); // t x = T
         var abstraction = Abstraction(variable, antisymmetry); // \x . t x = \x . T
@@ -106,7 +192,7 @@ public static class ForAllTheorems
         return ModusPonens(Commutativity(applied), equivified); // ! x . t x
     }
     
-    public static Theorem Generalise(Theorem theorem, Term[] variables)
+    public static Theorem Generalise(Theorem theorem, params Term[] variables)
     {
         return variables.Reverse().Aggregate(theorem, Generalise);
     }
@@ -182,6 +268,86 @@ public static class ForAllTheorems
 
     public static Theorem AllApplicationsImpliesEquality(Theorem theorem)
     {
-        return TryAllApplicationsImpliesEquality(theorem).ValueOrException();
+        return (Theorem) TryAllApplicationsImpliesEquality(theorem);
+    }
+
+    public static Theorem NewDefinition(Term term)
+    {
+        return (Theorem) TryNewDefinition(term);
+    }
+    
+    public static Result<Theorem> TryNewDefinition(Term term) // NAME p q = f p q goes to |- NAME = \ p q . f p q and then outputs |- ! p q . NAME p q = f p q
+    {
+        if (!TryBinaryDeconstruct(term, "=").Deconstruct(out var left, out var right, out var error))
+            return error;
+
+        var parameters = new List<Term>();
+        var nameVar = left;
+
+        while (!nameVar.IsVar())
+        {
+            if (!nameVar.IsComb())
+                return "Expected left-hand side of definition to be of the form \"NAME x1 x2 ...\"";
+            
+            var (fn, arg) = nameVar.DeconstructComb();
+            if (!arg.IsVar())
+                return "Expected left-hand side of definition to be of the form \"NAME x1 x2 ...\"";
+            
+            parameters.Add(arg);
+            nameVar = fn;
+        }
+
+        foreach (var param in parameters)
+        {
+            right = MakeAbstraction(param, right);
+        }
+        
+        var defnTerm = ApplyBinaryFunction("=", nameVar, right);
+
+        var defn = NewBasicDefinition(defnTerm); // |- NAME = \ p q . f p q
+
+        parameters.Reverse();
+        
+        foreach (var param in parameters)
+        {
+            defn = Congruence(defn, param); // |-  NAME p = (\ p q . f p q) p
+            var defnRight = BinaryRight(defn); // (\ p q . f p q) p
+            var beta = BetaReduction(defnRight); // (\ p q . f p q) p = \ q . f p q
+            defn = Transitivity(defn, beta); // |- NAME p = \ q . f p q
+        }
+
+        return Generalise(defn, parameters.ToArray()); // |- ! p q . NAME p q = f p q
+    }
+
+    public static Result<Theorem> TryForAllIndependentOfVar(Term term) // |- (! y . s) = s
+    {
+        if (!TryUnaryDeconstruct(term, "!").Deconstruct(out var arg, out var error))
+            return error;
+        
+        if (!arg.TryDeconstructAbs().Deconstruct(out var param, out var abs, out error))
+            return error;
+
+        var uniqueThm = ChangeToUniqueVariables(ForAllIndependentOfVariableTheorem, UsedNames(term),
+            new Dictionary<string, string>
+            {
+                ["x"] = param.DeconstructVar().name
+            }); // |- ! s . (! y . s) = s
+        
+        var type = param.TypeOf();
+
+        if (type != MakeType("a"))
+        {
+            uniqueThm = InstantiateTypes(new Dictionary<Type, Type>
+            {
+                [MakeType("a")] = type
+            }, uniqueThm);
+        }
+        
+        return TrySpecialise(uniqueThm, abs); // |- (! y . s) = s
+    }
+    
+    public static Theorem ForAllIndependentOfVar(Term term)
+    {
+        return (Theorem) TryForAllIndependentOfVar(term);
     }
 }

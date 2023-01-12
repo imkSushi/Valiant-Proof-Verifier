@@ -2,11 +2,12 @@
 TyVar -> '\'' IDENTIFIER
 TyApp -> ':' IDENTIFIER  Type*
 
-Term -> Var | Const | Comb | Abs | '(' Term ')' | Infix
+Term -> Var | Const | Comb | Abs | '(' Term ')' | Infix | Lambda
 Var -> '$'? IDENTIFIER Type?
 Const -> IDENTIFIER Type?
 Comb -> Term Term
 Abs -> '\' Var+ '.' Term
 Infix -> Term KEYWORD Term
+Lambda -> KEYWORD Var+ '.' Term
 
 Comb is left associative

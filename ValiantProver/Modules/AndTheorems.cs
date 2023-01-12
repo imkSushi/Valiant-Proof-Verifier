@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
@@ -18,8 +19,8 @@ public static class AndTheorems
         LambdaEvaluator.Load();
         TruthTheorems.Load();
         
-        AndDefinition = NewBasicDefinition(Parse(@"""/\"" = \ p q . ((\f:fun :bool :fun :bool :bool . f p q) = (\ f. f T T))"));
         TryRegisterInfixRule(@"/\", @"/\", 30, true, "∧");
+        AndDefinition = NewBasicDefinition(Parse(@"(/\) = \ p q . ((\f:fun :bool :fun :bool :bool . f p q) = (\ f. f T T))"));
         
         And = ConstructAnd();
         AndLeft = ConstructAndLeft();
@@ -115,7 +116,7 @@ public static class AndTheorems
 
     public static Theorem DeconjugateLeft(Theorem theorem)
     {
-        return TryDeconjugateLeft(theorem).ValueOrException();
+        return (Theorem) TryDeconjugateLeft(theorem);
     }
 
     public static Result<Theorem> TryDeconjugateLeft(Theorem theorem)
@@ -134,7 +135,7 @@ public static class AndTheorems
 
     public static Theorem DeconjugateRight(Theorem theorem)
     {
-        return TryDeconjugateRight(theorem).ValueOrException();
+        return (Theorem) TryDeconjugateRight(theorem);
     }
     
     public static Result<Theorem> TryDeconjugateRight(Theorem theorem)

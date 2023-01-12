@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 
 namespace ValiantProver.Modules;
 

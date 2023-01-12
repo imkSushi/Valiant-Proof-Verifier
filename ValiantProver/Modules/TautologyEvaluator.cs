@@ -1,10 +1,14 @@
-﻿using ValiantBasics;
+﻿using System.Runtime.Intrinsics.Arm;
+using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
+using static ValiantProver.Modules.ExistsTheorems;
 using static ValiantProver.Modules.FalseAndNotTheorems;
 using static ValiantProver.Modules.ForAllTheorems;
+using static ValiantProver.Modules.ImpliesTheorems;
 using static ValiantProver.Modules.LambdaEvaluator;
 using static ValiantProver.Modules.SelectorTheorems;
 using static ValiantProver.Modules.Theory;
@@ -33,6 +37,7 @@ public static class TautologyEvaluator
         NotPEqualsFalse = CheckTrivialBools(Parse(@"\ p . (~p = F) = p"));
         NotPEqualsNotQ = CheckTrivialDoubleBools(Parse(@"\ p q . (~p = ~q) = (p = q)"));
         NotPEqualsQ = CheckTrivialDoubleBools(Parse(@"\ p q . (~p = q) = ~(p = q)"));
+        NotPEqualsQInversion = CheckTrivialDoubleBools(Parse(@"\ p q . (~p = q) = (p = ~q)"));
         NotPEqualsP = CheckTrivialBools(Parse(@"\ p . (~p = p) = F"));
         PEqualsNotQ = CheckTrivialDoubleBools(Parse(@"\ p q . (p = ~q) = ~(p = q)"));
         PEqualsNotP = CheckTrivialBools(Parse(@"\ p . (p = ~p) = F"));
@@ -65,12 +70,19 @@ public static class TautologyEvaluator
         PImpliesNotP = CheckTrivialBools(Parse(@"\ p . (p -> ~p) = ~p"));
         NotPImpliesP = CheckTrivialBools(Parse(@"\ p . (~p -> p) = p"));
         NotPImpliesQ = CheckTrivialDoubleBools(Parse(@"\ p q . (~p -> q) = (p \/ q)"));
+        NotPImpliesQInversion = CheckTrivialDoubleBools(Parse(@"\ p q . (~p -> q) = (~q -> p)"));
         PImpliesNotQ = CheckTrivialDoubleBools(Parse(@"\ p q . (p -> ~q) = ~(p /\ q)"));
+        PImpliesNotQInversion = CheckTrivialDoubleBools(Parse(@"\ p q . (p -> ~q) = (q -> ~p)"));
         NotPImpliesNotQ = CheckTrivialDoubleBools(Parse(@"\ p q . (~p -> ~q) = (q -> p)"));
+        
+        ExistsAndForAllInversionTheorem = ConstructExistsAndForAllInversionTheorem();
+        ForAllAndExistsInversionTheorem = ConstructForAllAndExistsInversionTheorem();
+        TrueAndFalseEqualTheorem = ConstructTrueAndFalseEqualTheorem();
     }
     
     public static Theorem EnumeratedBoolTheorem { get; } // f T, f F |- !x . f x
     public static Theorem DoubleEnumeratedBoolTheorem { get; } // f T T, f T F, f F T, f F F |- !x y . f x y
+    public static Theorem TrueAndFalseEqualTheorem { get; } // f T = k, f F = k |- ! x . f x = k
     
     public static Theorem TrueEqualsP { get; } // |- ! p . (T = p) = p
     public static Theorem PEqualsTrue { get; } // |- ! p . (p = T) = p
@@ -80,6 +92,7 @@ public static class TautologyEvaluator
     public static Theorem NotPEqualsFalse { get; } // |- ! p . (! p = F) = p
     public static Theorem NotPEqualsNotQ { get; } // |- ! p q . (~p = ~q) = (p = q)
     public static Theorem NotPEqualsQ { get; } // |- ! p q . (~p = q) = ~(p = q)
+    public static Theorem NotPEqualsQInversion { get; } // ! p q . (~p = q) = (p = ~q)
     public static Theorem NotPEqualsP { get; } // |- ! p . (~p = p) = F
     public static Theorem PEqualsNotQ { get; } // |- ! p q . (p = ~q) = ~(p = q)
     public static Theorem PEqualsNotP { get; } // |- ! p . (p = ~p) = F
@@ -112,8 +125,12 @@ public static class TautologyEvaluator
     public static Theorem PImpliesNotP { get; } // |- ! p . (p -> ~p) = ~p
     public static Theorem NotPImpliesP { get; } // |- ! p . (~p -> p) = p
     public static Theorem NotPImpliesQ { get; } // |- ! p q . (~p -> q) = (p \/ q)
+    public static Theorem NotPImpliesQInversion { get; } // |- ! p q . (~p -> q) = (~q -> p)
     public static Theorem PImpliesNotQ { get; } // |- ! p q . (p -> ~q) = ~(p /\ q)
+    public static Theorem PImpliesNotQInversion { get; } // |- ! p q . (p -> ~q) = (~p \/ q)
     public static Theorem NotPImpliesNotQ { get; } // |- ! p q . (~p -> ~q) = (q -> p)
+    public static Theorem ExistsAndForAllInversionTheorem { get; } // |- ! f . ~(? f) = (! x . ~(f x))
+    public static Theorem ForAllAndExistsInversionTheorem { get; } // |- ! f . ~(! f) = (? x . ~(f x))
 
     private static Theorem ConstructEnumeratedBoolTheorem() // f T, f F |- !x . f x
     {
@@ -189,6 +206,64 @@ public static class TautologyEvaluator
         return Generalise(eval, new []{x, y});
     }
 
+    private static Theorem ConstructExistsAndForAllInversionTheorem() // |- ! f . ~(? f) = ! x . ~(f x)
+    {
+        var f = Parse("f :fun 'a :bool");
+        var x = Parse("x 'a");
+        var fx = MakeCombination(f, x);
+        
+        var assumeFx = Assume(fx); // f x |- f x
+        var exists = Exists(Parse(@"\x . f :fun 'a :bool x"), assumeFx); // f x |- ? x . f x
+        var inverted = InvertTheoremAndPremise(exists, fx); // ~(? x . f x) |- ~(f x)
+        var generalised = Generalise(inverted, x); // ~(? x . f x) |- ! x . ~(f x)
+
+        var assumeExists = Assume(Parse("? x 'a . f x")); // ? x . f x |- ? x . f x
+        var existsExample = GetElementThatSatisfiesExistingFunction(assumeExists); // ? x . f x |- (\ x . f x) @(\ x . f x)
+        var existsEval = EvaluateLambdas(existsExample); // ? x . f x |- f @f
+        
+        var assumeForAll = Assume(Parse("! x 'a . ~(f x)")); // ! x . ~(f x) |- ! x . ~(f x)
+        var forAllExample = Specialise(assumeForAll, Parse(@"@f")); // ! x . ~(f x) |- ~(f @f)
+        var contradiction = ContradictionFromPEqNotP(AntiSymmetry(existsEval, forAllExample)); // ! x . ~(f x), ? x . f x |- F
+        var result = Contradiction(contradiction, Parse("? x 'a . f x")); // ! x . ~(f x) |- ~(? f)
+
+        var antiSym = AntiSymmetry(result, generalised); // ~(? f) = ! x . ~(f x)
+
+        return Generalise(antiSym, f); // |- ! f . ~(? f) = ! x . ~(f x)
+    }
+
+    private static Theorem ConstructForAllAndExistsInversionTheorem() // |- ! f . ~(! f) = (? x . ~(f x))
+    {
+        var f = Parse("f :fun 'a :bool");
+        var arg = Parse(@"\x 'a . ~(f x)");
+
+        var spec = Specialise(ExistsAndForAllInversionTheorem, arg); // |- ~(? ~(f x)) = ! x . ~~(f x)
+
+        var notNot = Specialise(DoubleNotEliminationTheorem, Parse("f :fun 'a :bool x")); // |- ~~(f x) = f x
+        var abs = Abstraction(Parse("x 'a"), notNot); // |- \x . ~~(f x) = \x . f x
+        var forAllNotNot = Congruence(MakeConstant("!"), abs); // |- ! x . ~~(f x) = ! \x . f x
+        
+        var noNotSpec = Transitivity(spec, forAllNotNot); // |- ~(? ~(f x)) = ! \x . f x
+        var simp = EvaluateLambdas(noNotSpec); // |- ~(? ~(f x)) = ! f
+
+        var inverted = InvertBothSidesOfEquals(simp); // |- (? ~(f x)) = ~(! f)
+        return Generalise(Commutativity(inverted), f); // |- ! f . ~(! f) = (? x . ~(f x))
+    }
+
+    private static Theorem ConstructTrueAndFalseEqualTheorem() // f T = k, f F = k |- ! x . f x = k
+    {
+        var assumptionT = Assume(Parse("f T = k 'a"));
+        var assumptionF = Assume(Parse("f F = k 'a"));
+
+        var enumerated = CasesEnumeratedBools(assumptionT, assumptionF, Parse(@"\ x :bool . f x = k 'a")); // f T = k, f F = k |- ! x . (\x .f x = k) x
+
+        return EvaluateLambdas(enumerated); // f T = k, f F = k |- ! x . f x = k
+    }
+
+    public static Theorem CasesEnumeratedBools(Theorem ft, Theorem ff, Term f)
+    {
+        return (Theorem) TryCasesEnumeratedBools(ft, ff, f);
+    }
+
     public static Result<Theorem> TryCasesEnumeratedBools(Theorem ft, Theorem ff, Term f)
     {
         var tr = MakeConstant("T");
@@ -223,7 +298,7 @@ public static class TautologyEvaluator
 
     public static Theorem CasesDoubleEnumeratedBools(Theorem ftt, Theorem ftf, Theorem fft, Theorem fff, Term f)
     {
-        return TryCasesDoubleEnumeratedBools(ftt, ftf, fft, fff, f).ValueOrException();
+        return (Theorem) TryCasesDoubleEnumeratedBools(ftt, ftf, fft, fff, f);
     }
 
     public static Result<Theorem> TryCasesDoubleEnumeratedBools(Theorem ftt, Theorem ftf, Theorem fft, Theorem fff, Term f)
@@ -298,9 +373,23 @@ public static class TautologyEvaluator
         if (term.IsConst() || term.IsVar())
             return Reflexivity(term);
 
-        var frees = term.FreesIn().Where(t => t.DeconstructVar().type == BoolTy).ToList();
-
         return SimplifyTruthsAndFalses(term);
+    }
+
+    public static Result<Theorem> TryTautologyEquivalent(Term left, Term right)
+    {
+        if (!TryTautology(left).Deconstruct(out var leftThm, out var error))
+            return error;
+
+        if (!TryTautology(right).Deconstruct(out var rightThm, out error))
+            return error;
+
+        return TryTransitivity(leftThm, Commutativity(rightThm));
+    }
+
+    public static Theorem TautologyEquivalent(Term left, Term right)
+    {
+        return (Theorem) TryTautologyEquivalent(left, right);
     }
 
     public static Result<Theorem> TryTautology(Term term)
@@ -360,26 +449,118 @@ public static class TautologyEvaluator
             return unaryName switch
             {
                 "~" => Transitivity(congruence, SimplifyNot(arg)),
-                /*"!" => Transitivity(congruence, SimplifyForall(arg)),
-                "?" => Transitivity(congruence, SimplifyExists(arg)),*/
+                "!" => Transitivity(congruence, SimplifyForAll(arg)),
+                "?" => Transitivity(congruence, SimplifyExists(arg)),
                 _   => congruence
             };
         }
 
-        if (left != t && left != f && right != t && right != f)
-            return congruence;
+        var eqn = congruence;
 
-        if (!op.TryDeconstructConst().Deconstruct(out var name, out _, out _))
-            return congruence;
-
-        return name switch
+        if (op.TryDeconstructConst().Deconstruct(out var name, out _, out _))
         {
-            "="   => Transitivity(congruence, SimplifyEquals(left, right)),
-            @"/\" => Transitivity(congruence, SimplifyAnd(left, right)),
-            @"\/" => Transitivity(congruence, SimplifyOr(left, right)),
-            "->"  => Transitivity(congruence, SimplifyImplies(left, right)),
-            _     => congruence
-        };
+            eqn = name switch
+            {
+                "="   => Transitivity(congruence, SimplifyEquals(left, right)),
+                @"/\" => Transitivity(congruence, SimplifyAnd(left, right)),
+                @"\/" => Transitivity(congruence, SimplifyOr(left, right)),
+                "->"  => Transitivity(congruence, SimplifyImplies(left, right)),
+                _     => congruence
+            };
+        }
+
+        var toDealWith2 = BinaryRight(eqn);
+        if (!TryBinaryDeconstruct(toDealWith2).IsSuccess(out var leftEqn, out var rightEqn, out _))
+            return eqn;
+
+        var leftFrees = leftEqn.FreesIn().Where(v => v.TypeOf() == BoolTy);
+        var rightFrees = rightEqn.FreesIn().Where(v => v.TypeOf() == BoolTy);
+        var intersect = leftFrees.Intersect(rightFrees).ToList();
+
+        for (var index = 0; index < intersect.Count; index++)
+        {
+            var freeVar = intersect[index];
+            if (index > 0 && !IsVariableFree(freeVar, toDealWith2))
+                continue;
+            var newEqn = SimplifyFreeBoolVariable(toDealWith2, freeVar);
+            if (newEqn == null)
+                continue;
+            eqn = Transitivity(eqn, newEqn);
+            if (index == intersect.Count - 1)
+                return eqn;
+            
+            toDealWith2 = BinaryRight(newEqn);
+        }
+        
+        return eqn;
+    }
+    
+    private static Theorem SimplifyForAll(Term term)
+    {
+        var forAllTerm = ApplyUnaryFunction("!", term);
+        
+        if (!term.TryDeconstructAbs().IsSuccess(out var variable, out var abstraction))
+            return Reflexivity(forAllTerm);
+
+        if (!IsVariableFree(variable, abstraction))
+            return ForAllIndependentOfVar(forAllTerm);
+
+        if (!TryUnaryDeconstruct(abstraction, "~").IsSuccess(out var abs)) // ! y . ~(g y = z) went to \ y . ~(g y = z) goes to g y = z
+            return Reflexivity(forAllTerm);
+
+        var unique = ChangeToUniqueVariables(ExistsAndForAllInversionTheorem, UsedNames(term), new Dictionary<string, string>
+        {
+            ["x"] = variable.DeconstructVar().name
+        }); // |- ! f . ~(? f) = ! x . ~(f x)
+
+        var (name, type) = variable.DeconstructVar();
+
+        if (type != MakeType("a"))
+        {
+            unique = InstantiateTypes(new Dictionary<Type, Type>
+            {
+                [MakeType("a")] = type
+            }, unique);
+        }
+
+        var thm = Commutativity(Specialise(unique, MakeAbstraction(variable, abs))); // |- (! y . ~((\y . g y = z) y) = ~(? (\ y . (g y = z)))
+
+        var lambdaEquiv = LambdaEquivalence(forAllTerm, BinaryLeft(thm)); // |- (! y . ~(g y = z)) = (! y . ~((\y . g y = z) y)
+        return Transitivity(lambdaEquiv, thm); // (! y . ~(g y = z)) = ~(? (\ y . (g y = z)))
+    }
+
+    private static Theorem SimplifyExists(Term term)
+    {
+        var existsTerm = ApplyUnaryFunction("?", term);
+
+        if (!term.TryDeconstructAbs().IsSuccess(out var variable, out var abstraction))
+            return Reflexivity(existsTerm);
+
+        if (!IsVariableFree(variable, abstraction))
+            return ExistsIndependentOfVar(existsTerm);
+
+        if (!TryUnaryDeconstruct(abstraction, "~").IsSuccess(out var abs)) // ? x . ~(f x)
+            return Reflexivity(existsTerm);
+
+        var unique = ChangeToUniqueVariables(ForAllAndExistsInversionTheorem, UsedNames(term), new Dictionary<string, string>
+        {
+            ["x"] = variable.DeconstructVar().name
+        }); // |- ! f . ~(! f) = ? x . ~(f x)
+
+        var type = variable.DeconstructVar().type;
+
+        if (type != MakeType("a"))
+        {
+            unique = InstantiateTypes(new Dictionary<Type, Type>
+            {
+                [MakeType("a")] = type
+            }, unique);
+        }
+
+        var thm = Commutativity(Specialise(unique, MakeAbstraction(variable, abs)));
+
+        var lambdaEquiv = LambdaEquivalence(existsTerm, BinaryLeft(thm));
+        return Transitivity(lambdaEquiv, thm);
     }
 
     private static Theorem SimplifyNot(Term term)
@@ -392,11 +573,11 @@ public static class TautologyEvaluator
 
         if (term == f)
             return NotFalse;
+
+        if (TryUnaryDeconstruct(term, "~").Deconstruct(out var notArg, out _))
+            return Specialise(DoubleNotEliminationTheorem, notArg);
         
-        if (!TryUnaryDeconstruct(term, "~").Deconstruct(out var notArg, out _))
-            return Reflexivity(term);
-        
-        return Specialise(DoubleNotEliminationTheorem, notArg);
+        return Reflexivity(ApplyUnaryFunction("~", term));
     }
 
     private static Theorem SimplifyEquals(Term left, Term right)
@@ -619,9 +800,33 @@ public static class TautologyEvaluator
         return ModusPonens(simp, theorem);
     }
 
+    private static Theorem? SimplifyFreeBoolVariable(Term term, Term variable) //returns null if no simpification possible
+    {
+        var ft = InstantiateVariables(new Dictionary<Term, Term>
+        {
+            [variable] = MakeConstant("T")
+        }, term);
+        
+        var ff = InstantiateVariables(new Dictionary<Term, Term>
+        {
+            [variable] = MakeConstant("F")
+        }, term);
+
+        var evalFt = TautologyPostLambda(ft);
+        var evalFf = TautologyPostLambda(ff);
+
+        var right = BinaryRight(evalFt);
+
+        if (right != BinaryRight(evalFf))
+            return null;
+        
+        var cased = CasesEnumeratedBools(evalFt, evalFf, MakeAbstraction(variable, ApplyBinaryFunction("=", term, right))); // |- ! p . f p = k
+        return Specialise(cased, variable);
+    }
+
     public static Theorem EvaluateDeterminedTruthsAndFalses(Term term)
     {
-        return TryEvaluateDeterminedTruthsAndFalses(term).ValueOrException();
+        return (Theorem) TryEvaluateDeterminedTruthsAndFalses(term);
     }
 
     public static Result<Theorem> TryEvaluateDeterminedTruthsAndFalses(Term term)
@@ -766,7 +971,7 @@ public static class TautologyEvaluator
 
     public static Theorem CheckTrivialDoubleBools(Term term)
     {
-        return TryCheckTrivialDoubleBools(term).ValueOrException();
+        return (Theorem) TryCheckTrivialDoubleBools(term);
     }
 
     public static Result<Theorem> TryChecktrivialBools(Term term)
@@ -796,6 +1001,133 @@ public static class TautologyEvaluator
     
     public static Theorem CheckTrivialBools(Term term)
     {
-        return TryChecktrivialBools(term).ValueOrException();
+        return (Theorem) TryChecktrivialBools(term);
+    }
+
+    public static Result<Theorem> TryInvertTheoremAndPremise(Theorem theorem, Term premise) // p |- q to ~p |- ~q
+    {
+        if (!theorem.Premises().Contains(premise))
+            return "Premise is not in theorem";
+
+        var discharged = Discharge(premise, theorem);
+        var (left, right, _) = BinaryDeconstruct(discharged);
+
+        switch (TryUnaryDeconstruct(left, "~").IsSuccess(out var leftArg), TryUnaryDeconstruct(right, "~").IsSuccess(out var rightArg))
+        {
+            case (true, true): // |- ~p -> ~q
+            {
+                var thm = Specialise(NotPImpliesNotQ, leftArg!, rightArg!); // |- (~p -> ~q) = (q -> p)
+                var mp = ModusPonens(thm, discharged); // |- q -> p
+                return Undischarge(mp); // q |- p
+            }
+            case (true, false): // |- ~p -> q
+            {
+                var thm = Specialise(NotPImpliesQInversion, leftArg!, right); // |- (~p -> q) = (~q -> p)
+                var mp = ModusPonens(thm, discharged); // |- ~q -> p
+                return Undischarge(mp); // ~q |- p
+            }
+            case (false, true): // |- p -> ~q
+            {
+                var thm = Specialise(PImpliesNotQInversion, left, rightArg!); // |- (p -> ~q) = (q -> ~p)
+                var mp = ModusPonens(thm, discharged); // |- q -> ~p
+                return Undischarge(mp); // q |- ~p
+            }
+            case (false, false): // |- p -> q
+            {
+                var thm = Specialise(NotPImpliesNotQ, right, left); // |- (~q -> ~p) = (p -> q)
+                var mp = ModusPonens(Commutativity(thm), discharged); // |- ~q -> ~p
+                return Undischarge(mp); // ~q |- ~p
+            }
+        }
+    }
+    
+    public static Theorem InvertTheoremAndPremise(Theorem theorem, Term premise)
+    {
+        return (Theorem) TryInvertTheoremAndPremise(theorem, premise);
+    }
+
+    public static Theorem InvertBothSidesOfEquals(Theorem theorem)
+    {
+        return (Theorem) TryInvertBothSidesOfEquals(theorem);
+    }
+
+    public static Result<Theorem> TryInvertBothSidesOfEquals(Theorem theorem)
+    {
+        if (!TryBinaryDeconstruct(theorem, "=").Deconstruct(out var left, out var right, out var error))
+            return error;
+        
+
+        switch (TryUnaryDeconstruct(left, "~").IsSuccess(out var leftArg), TryUnaryDeconstruct(right, "~").IsSuccess(out var rightArg))
+        {
+            case (true, true): // |- ~p = ~q
+            {
+                var thm = Specialise(NotPEqualsNotQ, leftArg!, rightArg!); // |- (~p = ~q) = (p = q)
+                return ModusPonens(thm, theorem); // |- p = q
+            }
+            case (true, false): // |- ~p = q
+            {
+                var thm = Specialise(NotPEqualsQInversion, leftArg!, right); // |- (~p = q) = (p = ~q)
+                return ModusPonens(thm, theorem); // |- p = ~q
+            }
+            case (false, true): // |- p = ~q
+            {
+                var thm = Specialise(NotPEqualsQInversion, left, rightArg!); // |- (~p = q) = (p = ~q)
+                return ModusPonens(Commutativity(thm), theorem); // |- ~p = q
+            }
+            case (false, false): // |- p = q
+            {
+                var thm = Specialise(NotPEqualsNotQ, left, right); // |- (~p = ~q) = (p = q)
+                return ModusPonens(Commutativity(thm), theorem); // |- ~p = ~q
+            }
+        }
+    }
+
+    public static Result<Theorem> TryTrueAndFalseEqual(Theorem ftEqFf, Term f, Term variable) // given |- f T = f F and f, return |- ! x . f x
+    {
+        if (!variable.TryDeconstructVar().Deconstruct(out var name, out var type, out var error))
+            return error;
+        
+        if (!TryBinaryDeconstruct(ftEqFf, "=").Deconstruct(out var ft, out var ff, out error))
+            return error;
+
+        if (type != ft.TypeOf())
+            return "Type of variable does not match type of term";
+        
+        if (MakeType("fun",new []{BoolTy, type}) != f.TypeOf())
+            return "fT and fF do not match f";
+
+        var ffEqFf = Reflexivity(ff); // |- f F = f F
+
+        var uniqueTerms = ChangeToUniqueVariables(TrueAndFalseEqualTheorem, UsedNames(f), new Dictionary<string, string>
+        {
+            ["x"] = name
+        }); // f T = k, f F = k |- ! x . f x
+
+        var premise = uniqueTerms.Premises().First();
+        var (premFt, premK, _) = BinaryDeconstruct(premise);
+
+        var (kName, kType) = premK.DeconstructVar();
+        var (fName, fType) = premFt.DeconstructComb().application.DeconstructVar();
+
+        if (ft.TypeOf() != kType)
+        {
+            uniqueTerms = InstantiateTypes(new Dictionary<Type, Type>
+            {
+                [kType] = type
+            }, uniqueTerms);
+        }
+
+        var inst = InstantiateVariables(new Dictionary<Term, Term>
+        {
+            [MakeVariable(kName, type)] = ff,
+            [MakeVariable(fName, f.TypeOf())] = f
+        }, uniqueTerms); // f F = f F, f T = f F |- ! x . f x
+        
+        return TryElimination(inst, ffEqFf, ftEqFf); // |- ! x . f x
+    }
+
+    public static Theorem TrueAndFalseEqual(Theorem ftEqFf, Term f, Term variable)
+    {
+        return (Theorem) TryTrueAndFalseEqual(ftEqFf, f, variable);
     }
 }

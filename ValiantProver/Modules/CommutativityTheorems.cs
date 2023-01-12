@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.Theory;
@@ -54,7 +55,7 @@ public static class CommutativityTheorems
 
     public static Theorem Commutativity(Theorem theorem)
     {
-        return TryCommutativity(theorem).ValueOrException();
+        return (Theorem) TryCommutativity(theorem);
     }
 
     public static Result<Theorem> TryCommutativity(Theorem theorem)

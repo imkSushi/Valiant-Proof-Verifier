@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
@@ -19,16 +20,18 @@ public static class OrTheorems
         ImpliesTheorems.Load();
         ForAllTheorems.Load();
         
-        OrDefinition = NewBasicDefinition(Parse(@"""\/"" = \ p q . ! r . (p -> r) -> ((q -> r) -> r)"));
         TryRegisterInfixRule(@"\/", @"\/", 37, true, "∨");
+        OrDefinition = NewDefinition(Parse(@"(p \/ q) = ! r . (p -> r) -> ((q -> r) -> r)"));
 
         OrLeft = ConstructOrLeft();
         OrRight = ConstructOrRight();
+        OrCommutativityTheorem = ConstructOrCommutativityTheorem();
     }
     
     public static Theorem OrDefinition { get; }
     public static Theorem OrLeft { get; } // p |- p \/ q
     public static Theorem OrRight { get; } // q |- p \/ q
+    public static Theorem OrCommutativityTheorem { get; } // ! p q . (p \/ q) = (q \/ p)
 
     private static Theorem ConstructOrLeft()
     {
@@ -45,7 +48,7 @@ public static class OrTheorems
         var prqrr = Discharge(Parse("p -> r"), stuffImpliesQrr); // p |- (p -> r) -> ((q -> r) -> r)
         var generalised = Generalise(prqrr, r); // |- ! r . (p -> r) -> ((q -> r) -> r)
 
-        return ModusPonens(Commutativity(ApplyBinaryDefinition(OrDefinition, p, q)), generalised);
+        return ModusPonens(Commutativity(Specialise(OrDefinition, p, q)), generalised);
     }
 
     private static Theorem ConstructOrRight()
@@ -60,7 +63,24 @@ public static class OrTheorems
         var prqrr = AddImpliesAssumption(qrr, Parse("p -> r")); // q |- (p -> r) -> ((q -> r) -> r)
         var generalised = Generalise(prqrr, r); // |- ! r . (p -> r) -> ((q -> r) -> r)
         
-        return ModusPonens(Commutativity(ApplyBinaryDefinition(OrDefinition, p, q)), generalised);
+        return ModusPonens(Commutativity(Specialise(OrDefinition, p, q)), generalised);
+    }
+
+    private static Theorem ConstructOrCommutativityTheorem()
+    {
+        var p = MakeVariable("p", BoolTy); // p
+        var q = MakeVariable("q", BoolTy); // q
+
+        var pImplies = Disjunct(q, Assume(p)); // p |- q \/ p
+        var qImplies = Disjunct(Assume(q), p); // q |- q \/ p
+        
+        var disj = DisjunctCases(Assume(Parse(@"p \/ q")), pImplies, qImplies); // p \/ q |- q \/ p
+        
+        var disj2 = DisjunctCases(Assume(Parse(@"q \/ p")), OrRight, OrLeft); // q \/ p |- p \/ q
+
+        var antisym = AntiSymmetry(disj2, disj); // |- p \/ q = q \/ p
+
+        return Generalise(antisym, p, q);
     }
 
     public static Result<Theorem> TryDisjunct(Theorem theorem, Term term)
@@ -81,7 +101,7 @@ public static class OrTheorems
     
     public static Theorem Disjunct(Theorem theorem, Term term)
     {
-        return TryDisjunct(theorem, term).ValueOrException();
+        return (Theorem) TryDisjunct(theorem, term);
     }
 
     public static Result<Theorem> TryDisjunct(Term term, Theorem theorem)
@@ -102,7 +122,7 @@ public static class OrTheorems
     
     public static Theorem Disjunct(Term term, Theorem theorem)
     {
-        return TryDisjunct(term, theorem).ValueOrException();
+        return (Theorem) TryDisjunct(term, theorem);
     }
     
     public static Theorem Disjunct(Theorem left, Theorem right)
@@ -139,12 +159,12 @@ public static class OrTheorems
         {
             rName = GetFreeVariableName(new []{left, right, MakeVariable("p", BoolTy), MakeVariable("q", BoolTy)});
             var subs = LambdaEquivalence(OrDefinition.Conclusion(),
-                Parse(@$"(\/) = \ p q . ! {rName} . (p -> {rName}) -> ((q -> {rName}) -> {rName})"));
+                Parse(@$"! p q . p \/ q = ! {rName} . (p -> {rName}) -> ((q -> {rName}) -> {rName})"));
             
             orDefn = ModusPonens(subs, OrDefinition);
         }
         
-        var orDefnInst = ApplyBinaryDefinition(orDefn, left, right); // |- t1 \/ t2 = ! r . (t1 -> r) -> ((t2 -> r) -> r)
+        var orDefnInst = Specialise(orDefn, left, right); // |- t1 \/ t2 = ! r . (t1 -> r) -> ((t2 -> r) -> r)
 
         var orDefnUsage = ModusPonens(orDefnInst, orThm); // A |- ! r . (t1 -> r) -> ((t2 -> r) -> r)
         
@@ -158,6 +178,21 @@ public static class OrTheorems
     
     public static Theorem DisjunctCases(Theorem orThm, Theorem thm1, Theorem thm2) // A |- t1 \/ t2, A1 |- t, A2 |- t 
     {
-        return TryDisjunctCases(orThm, thm1, thm2).ValueOrException();
+        return (Theorem) TryDisjunctCases(orThm, thm1, thm2);
+    }
+
+    public static Result<Theorem> TryOrCommutativity(Theorem theorem)
+    {
+        if (!TryBinaryDeconstruct(theorem, @"/\").Deconstruct(out var left, out var right, out var error))
+            return error;
+        
+        var com = Specialise(OrCommutativityTheorem, left, right); // |- p \/ q = q \/ p
+        
+        return ModusPonens(com, theorem);
+    }
+    
+    public static Theorem OrCommutativity(Theorem theorem)
+    {
+        return (Theorem) TryOrCommutativity(theorem);
     }
 }

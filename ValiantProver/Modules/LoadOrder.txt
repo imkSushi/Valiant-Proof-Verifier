@@ -10,12 +10,14 @@ LambdaEval      <- Eta
 Unary           <- LambdaEval
 And             <- LambdaEval,      Truth
 ForAll          <- Unary,           Truth
-Implies         <- And
+Implies         <- ForAll,          And
 Exists          <- Implies,         ForAll
 Or              <- Implies,         ForAll
 False & Not     <- Or
 ExistsUnique    <- Exists
 Selector        <- ExistsUnique,    False & Not
 TautologyEval   <- Selector
+Jectivity       <- TautologyEval
+Ind             <- Jectivity
 
-TopLevel        <-TautologyEval
+TopLevel        <- Ind

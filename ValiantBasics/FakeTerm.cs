@@ -1,4 +1,5 @@
 ﻿using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProofVerifier.Kernel;
 
 namespace ValiantBasics;

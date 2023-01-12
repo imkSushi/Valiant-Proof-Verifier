@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.CommutativityTheorems;
 using static ValiantProver.Modules.Theory;
@@ -22,7 +23,7 @@ public static class EtaReductionTheorems
 
     public static Theorem ApplyEtaReduction(Term term)
     {
-        return TryApplyEtaReduction(term).ValueOrException();
+        return (Theorem) TryApplyEtaReduction(term);
     }
     
     public static Result<Theorem> TryApplyEtaReduction(Term term) // \y . g y
@@ -53,7 +54,7 @@ public static class EtaReductionTheorems
 
     public static Theorem CustomEtaReduction(string variableName, string applicationName)
     {
-        return TryCustomEtaReduction(variableName, applicationName).ValueOrException();
+        return (Theorem) TryCustomEtaReduction(variableName, applicationName);
     }
 
     public static Result<Theorem> TryCustomEtaReduction(string variableName, string applicationName)
@@ -110,7 +111,7 @@ public static class EtaReductionTheorems
     
     public static Theorem CustomEtaReduction(string variableName, string applicationName, Type type)
     {
-        return TryCustomEtaReduction(variableName, applicationName, type).ValueOrException();
+        return (Theorem) TryCustomEtaReduction(variableName, applicationName, type);
     }
 
     public static Result<Theorem> TryChangeLambdaVariable(Term term, Term variable) // \z . t and y
@@ -154,6 +155,6 @@ public static class EtaReductionTheorems
     
     public static Theorem ChangeLambdaVariable(Term term, Term variable)
     {
-        return TryChangeLambdaVariable(term, variable).ValueOrException();
+        return (Theorem) TryChangeLambdaVariable(term, variable);
     }
 }

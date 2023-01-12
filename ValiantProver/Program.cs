@@ -8,8 +8,6 @@ using static ValiantProver.Modules.ImpliesTheorems;
 var kernel = new Kernel();
 var parser = Theory.GetParser();
 
-//new PrettyPrinter.DetailedPrinter().Activate();
-
 TopLevel.Load();
 
 var eq = parser.ParseTerm("p = q = r"); // (p = q) = r i.e. = (= p q) r
@@ -24,12 +22,15 @@ var exists = ExistsTheorems.Exists(parser.ParseTerm(@"\p :bool . p"), TruthTheor
 
 var exists2 = ExistsTheorems.Exists(parser.ParseTerm(@"\p . ! q . q -> p"), ForAllTheorems.Generalise(AddImpliesAssumption(TruthTheorems.Truth, parser.ParseTerm("q: bool")), parser.ParseTerm("q :bool")));
 
-var tautTest = TautologyEvaluator.Tautology(parser.ParseTerm("p -> (q -> p)"));
+var tautTest = TautologyEvaluator.Tautology(parser.ParseTerm(@"! p q . p -> (q -> p)"));
 
 var printerTest = parser.ParseTerm(@"! p q . ? f . @ f p = @ f q");
 
+Console.WriteLine(eq);
 Console.WriteLine(pImpQImpP);
+Console.WriteLine(generalise);
 Console.WriteLine(exists);
 Console.WriteLine(exists2);
 Console.WriteLine(tautTest);
 Console.WriteLine(printerTest);
+Console.WriteLine(SelectorTheorems.ExcludedMiddleTheorem);

@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using ValiantProofVerifier;
 
-namespace ValiantBasics;
+namespace ValiantResults;
 
 public class Result<T>
 {
@@ -53,20 +52,12 @@ public class Result<T>
     public static implicit operator Result<T>(string error) => new(error);
     public static implicit operator Result<T>(T value) => new(value);
 
-    public T ValueOrException()
+    public static explicit operator T(Result<T> result)
     {
-        if (Success)
-            return Value;
+        if (result.Success)
+            return result.Value;
         
-        throw new TheoremException(Message);
-    }
-    
-    public T ValueOrException<TException>(Func<string, TException> thrower) where TException : Exception
-    {
-        if (Success)
-            return Value;
-        
-        throw thrower(Message);
+        throw new ResultException(result.Message);
     }
 }
 
@@ -256,33 +247,25 @@ public class Result
     {
         return left._success ? left : right;
     }
-    
+
     public static Result operator &(Result left, Result right)
     {
         return left._success ? right : left;
     }
-
-    public void ValueOrException()
-    {
-        if (_success)
-            return;
-        
-        throw new TheoremException(_message);
-    }
     
-    public void ValueOrException<TException>(Func<string, TException> thrower) where TException : Exception
+    public void AssertSuccess()
     {
         if (_success)
             return;
         
-        throw thrower(_message);
+        throw new ResultException(_message);
     }
 }
 
 public class StringResult
 {
-    private bool _success;
-    private string _value;
+    private readonly bool _success;
+    private readonly string _value;
     
     public StringResult(bool success, string value)
     {
@@ -320,20 +303,11 @@ public class StringResult
     
     public static implicit operator StringResult((bool success, string error) tuple) => new(tuple.success, tuple.error);
     public static implicit operator StringResult((string error, bool success) tuple) => new(tuple.success, tuple.error);
-
-    public string ValueOrException()
+    public static explicit operator string(StringResult result)
     {
-        if (_success)
-            return _value;
+        if (result._success)
+            return result._value;
         
-        throw new TheoremException(_value);
-    }
-    
-    public string ValueOrException<TException>(Func<string, TException> thrower) where TException : Exception
-    {
-        if (_success)
-            return _value;
-        
-        throw thrower(_value);
+        throw new ResultException(result._value);
     }
 }

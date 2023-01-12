@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
@@ -57,7 +58,7 @@ public static class TransitivityTheorems
 
     public static Theorem Transitivity(Theorem left, Theorem right)
     {
-        return TryTransitivity(left, right).ValueOrException();
+        return (Theorem) TryTransitivity(left, right);
     }
 
     public static Result<Theorem> TryTransitivity(Theorem left, Theorem right)

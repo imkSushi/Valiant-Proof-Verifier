@@ -1,10 +1,12 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
 using static ValiantProver.Modules.ForAllTheorems;
 using static ValiantProver.Modules.ImpliesTheorems;
+using static ValiantProver.Modules.LambdaEvaluator;
 using static ValiantProver.Modules.OrTheorems;
 using static ValiantProver.Modules.Theory;
 using static ValiantProver.Modules.TransitivityTheorems;
@@ -21,12 +23,12 @@ public static class FalseAndNotTheorems
     {
         OrTheorems.Load();
         
-        FalseDefinition = NewBasicDefinition(Parse("F = ! p . p"));
         TryRegisterConst("F", "⊥");
+        FalseDefinition = NewDefinition(Parse("F = ! p . p"));
         
-        NotDefinition = NewBasicDefinition(Parse(@"~ = \p . p -> F"));
 
         TryRegisterPrefixRule("~", "~", 1, "¬");
+        NotDefinition = NewDefinition(Parse(@"~p = p -> F"));
         
         FalseImpliesAnythingTheorem = ConstructFalseImpliesAnythingTheorem();
         NotEqualsFalseTheorem = ConstructNotEqualsFalseTheorem();
@@ -85,7 +87,7 @@ public static class FalseAndNotTheorems
     {
         var p = MakeVariable("p", BoolTy); // p
         
-        var notP = ApplyUnaryDefinition(NotDefinition, p); // |- ~p = (p -> F)
+        var notP = Specialise(NotDefinition, p); // |- ~p = (p -> F)
         var pImpF = ModusPonens(notP, Assume(Parse("~p"))); // ~p |- p -> F
         var fImpP = Discharge(MakeConstant("F"), FalseImpliesAnything(p)); // |- F -> p
         var pEqF = ApplyAntiSymmetry(pImpF, fImpP); // ~p |- p = F
@@ -260,7 +262,7 @@ public static class FalseAndNotTheorems
         
         var assumption = Assume(Parse("p = ~p")); // p = ~p |- p = ~p
         var mp = ModusPonens(assumption, Assume(p)); // p = ~p, p |- ~p
-        var notDef = ApplyUnaryDefinition(NotDefinition, p); // ~p = p -> F
+        var notDef = Specialise(NotDefinition, p); // ~p = p -> F
         var mp2 = ModusPonens(notDef, mp); // p = ~p, p |- p -> F
         var undischarge = Undischarge(mp2); // p = ~p, p |- F
         var discharge = Discharge(p, undischarge); // p = ~p |- p -> F
@@ -289,9 +291,13 @@ public static class FalseAndNotTheorems
     public static Theorem Contradiction(Theorem theorem, Term premise) // p |- F goes to |- ~p
     {
         var notPremise = Discharge(premise, theorem);
-        var notThm = ApplyUnaryDefinition(NotDefinition, premise);
+        var notThm = Specialise(NotDefinition, premise);
+
+        var lambdaEquiv = LambdaEquivalence(notPremise.Conclusion(), BinaryRight(notThm));
         
-        return ModusPonens(Commutativity(notThm), notPremise);
+        var mp = ModusPonens(lambdaEquiv, notPremise);
+
+        return ModusPonens(Commutativity(notThm), mp);
     }
     
     public static Result<Theorem> TryContradiction(Theorem theorem, Term premise)
@@ -333,6 +339,6 @@ public static class FalseAndNotTheorems
     
     public static Theorem ContradictionFromPEqNotP(Theorem theorem) // |- p = ~p goes to F
     {
-        return TryContradictionFromPEqNotP(theorem).ValueOrException();
+        return (Theorem) TryContradictionFromPEqNotP(theorem);
     }
 }

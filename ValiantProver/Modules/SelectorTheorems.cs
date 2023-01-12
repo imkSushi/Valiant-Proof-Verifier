@@ -1,9 +1,11 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.AndTheorems;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.CommutativityTheorems;
+using static ValiantProver.Modules.ExistsTheorems;
 using static ValiantProver.Modules.ExistsUniqueTheorems;
 using static ValiantProver.Modules.FalseAndNotTheorems;
 using static ValiantProver.Modules.ForAllTheorems;
@@ -45,7 +47,7 @@ public class SelectorTheorems
     private static Theorem ConstructExistsTheorem()
     {
         var p = Parse("p :fun 'a :bool"); // p
-        var existsP = ApplyUnaryDefinition(ExistsTheorems.ExistsDefinition, p); // |- ? p = !q . (!x . p x -> q) -> q
+        var existsP = Specialise(ExistsDefinition, p); // |- ? p = !q . (!x . p x -> q) -> q
         var mpElim = ModusPonens(existsP, Assume(Parse(@"(?) p :fun 'a :bool"))); // ?p |- !q . (!x . p x -> q) -> q
         var selector = Specialise(mpElim, Parse("p @ p :fun 'a :bool")); // ?p |- (!x . p x -> p @ p) -> p @ p
 
@@ -58,7 +60,7 @@ public class SelectorTheorems
     private static Theorem ConstructUniqueEqualsSelect()
     {
         var p = Parse("p :fun 'a :bool"); // p
-        var uniqueP = ApplyUnaryDefinition(ExistsUnqiueDefinition, p); // |- ?! p = ? p /\ ! x y . (p x /\ p y) -> x = y
+        var uniqueP = Specialise(ExistsUnqiueDefinition, p); // |- ?! p = ? p /\ ! x y . (p x /\ p y) -> x = y
         var mpElim = ModusPonens(uniqueP, Assume(Parse(@"(?!) p :fun 'a :bool"))); // ?!p |- ? p /\ ! x y . (p x /\ p y) -> x = y
         var exists = DeconjugateLeft(mpElim); // ?!p |- ? p
         var pSelectP = Elimination(ExistsTheorem, exists); // ?!p |- p @ p
@@ -74,23 +76,29 @@ public class SelectorTheorems
         var p = Parse("p :bool"); // p
         var f = Parse(@"\x . (p /\ x) \/ ~x"); // f
         var g = Parse(@"\x . (p /\ ~x) \/ x"); // g
-        var boolSelect = Parse(@"""@"" :fun :fun :bool :bool :bool"); // @
-        var sf = MakeCombination(boolSelect, f); // @f
-        var sg = MakeCombination(boolSelect, g); // @g
-        var pAndSf = ApplyBinaryFunction(@"/\", p, sf); // p /\ @f
-        var notSf = ApplyUnaryFunction("~", sf); // ~@f
-        var fEqG = ApplyBinaryFunction(@"=", f, g); // f = g
-        var notP = ApplyUnaryFunction("~", p); // ~p
+        
+        AddTypedTermMacro("f", f); // set f = \x . (p /\ x) \/ ~x
+        AddTypedTermMacro("g", g); // set g = \x . (p /\ ~x) \/ x
+
+        var boolSelect = Parse(@"@ :fun :fun :bool :bool :bool"); // @
+        var sf = Parse("@f"); // @f
+        var sg = Parse("@g"); // @g
+        var pAndSf = Parse(@"p /\ @f"); // p /\ @f
+        var notSf = Parse("~@f"); // ~@f
+        var fEqG = Parse("f = g"); // f = g
+        var notP = Parse("~p"); // ~p
         var x = MakeVariable("x", BoolTy); // x
-        var fx = MakeCombination(f, x); // f x
-        var gx = MakeCombination(g, x); // g x
+        var fx = Parse("f x"); // f x
+        var gx = Parse("g x"); // g x
         var notX = Parse("~x"); // ~x
-        var notSg = ApplyUnaryFunction("~", sg); // ~@g
-        var pAndNotSg = ApplyBinaryFunction(@"/\", p, notSg); // p /\ ~@g
+        var notSg = Parse("~@g"); // ~@g
+        var pAndNotSg = Parse(@"p /\ ~@g"); // p /\ ~@g
         var pAndX = Parse(@"p /\ x");
         var pAndNotX = Parse(@"p /\ ~x"); // p /\ ~x
         
-
+        RemoveMacro("f"); // remove f
+        RemoveMacro("g"); // remove g
+        
         var fFalse = EvaluateLambdas(MakeCombination(f, MakeConstant("F"))); // |- f F = (p /\ F) \/ ~F
         var notFalse = ModusPonens(Commutativity(NotFalse), Truth); // |- ~F
         var fFalseTrue = Disjunct(Parse(@"p /\ F"), notFalse); // |- (p /\ F) \/ ~F
@@ -204,7 +212,7 @@ public class SelectorTheorems
 
     public static Theorem CasesProof(Theorem left, Theorem right, Term premise)
     {
-        return TryCasesProof(left, right, premise).ValueOrException();
+        return (Theorem) TryCasesProof(left, right, premise);
     }
 
     public static Result<Theorem> TryCasesProof(Theorem left, Theorem right, Term premise) // p |- t and ~p |- t then |- t
@@ -257,7 +265,7 @@ public class SelectorTheorems
 
     public static Theorem SelectorFromExample(Theorem example, Term function)
     {
-        return TrySelectorFromExample(example, function).ValueOrException();
+        return (Theorem) TrySelectorFromExample(example, function);
     }
 
     public static Result<Theorem> TryDoubleNotElimination(Theorem theorem)
@@ -275,6 +283,36 @@ public class SelectorTheorems
     
     public static Theorem DoubleNotElimination(Theorem theorem)
     {
-        return TryDoubleNotElimination(theorem).ValueOrException();
+        return (Theorem) TryDoubleNotElimination(theorem);
+    }
+
+    public static Result<Theorem> TryGetElementThatSatisfiesExistingFunction(Theorem theorem) // ?p
+    {
+        if (!TryUnaryDeconstruct(theorem.Conclusion(), "?").Deconstruct(out var function, out var error))
+            return error;
+
+        var thm = ExistsTheorem; // ?p |- p @ p
+
+        var fnType = function.TypeOf().DeconstructFun().from;
+
+        if (fnType != MakeType("a"))
+        {
+            thm = InstantiateTypes(new Dictionary<Type, Type>
+            {
+                [MakeType("a")] = fnType
+            }, thm);
+        }
+        
+        var inst = InstantiateVariables(new Dictionary<Term, Term>
+        {
+            [MakeVariable("p", function.TypeOf())] = function
+        }, thm); // ?p |- p @ p
+        
+        return Elimination(inst, theorem); // p @ p
+    }
+
+    public static Theorem GetElementThatSatisfiesExistingFunction(Theorem theorem)
+    {
+        return (Theorem) TryGetElementThatSatisfiesExistingFunction(theorem);
     }
 }

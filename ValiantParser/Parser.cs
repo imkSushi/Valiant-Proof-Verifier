@@ -2,6 +2,7 @@
 using ValiantBasics;
 using ValiantParser.Inference;
 using ValiantProofVerifier;
+using ValiantResults;
 
 namespace ValiantParser;
 
@@ -14,6 +15,8 @@ public sealed class Parser
     private Kernel _kernel;
     private int _index;
     private HashSet<string> _suspendedKeywords = new();
+    private Dictionary<string, List<Token>> _tokenMacroDefinitions = new();
+    private Dictionary<string, InfTerm> _termMacroDefinitions = new();
 
 
     public Term ParseTerm(string term)
@@ -24,11 +27,14 @@ public sealed class Parser
     public Result<Term> TryParseTerm(string term)
     {
         _index = 0;
-        if (!Lex(term, out var error))
+        if (Lex(term).IsError(out var error))
             return error;
         
         if (!ParsePrecedence(InfixPrecedence.NotNone).Deconstruct(out var result, out error))
             return error;
+        
+        if (Current() is not EndOfExpressionToken)
+            return "Unexpected token. Expected end of expression.";
         
         if (!_typeInferer.InferType(result).Deconstruct(out var typedOutput, out error))
             return error;
@@ -39,21 +45,90 @@ public sealed class Parser
         return output;
     }
 
-    private bool Lex(string term, [MaybeNullWhen(true)] out string error)
+    public Result TryAddTokenMacro(string name, string value)
     {
-        _tokens = _lexer.Lex(term).ToList();
-        return CheckTokensForErrors(out error);
+        if (_tokenMacroDefinitions.ContainsKey(name) || _termMacroDefinitions.ContainsKey(name))
+            return $"Macro {name} already exists";
+        
+        var tokens = _lexer.Lex(value).ToArray();
+        
+        var errors = tokens.Where(token => token is ErrorToken).Cast<ErrorToken>().Select(token => token.Message).ToList();
+        if (errors.Any())
+            return string.Join("\n", errors);
+        
+        _tokenMacroDefinitions[name] = tokens[..^1].ToList(); // Remove EOF token
+        return Result.Success;
     }
 
-    private bool CheckTokensForErrors([MaybeNullWhen(true)] out string error)
+    public Result TryAddUntypedTermMacro(string name, string value)
     {
-        error = null;
-        var errors = _tokens.Where(token => token is ErrorToken).Cast<ErrorToken>().Select(token => token.Message).ToList();
-        if (!errors.Any()) 
-            return true;
+        if (_tokenMacroDefinitions.ContainsKey(name) || _termMacroDefinitions.ContainsKey(name))
+            return $"Macro {name} already exists";
         
-        error = string.Join("\n", errors);
-        return false;
+        _index = 0;
+        if (Lex(value).IsError(out var error))
+            return error;
+
+        if (!ParsePrecedence(InfixPrecedence.NotNone).Deconstruct(out var term, out error))
+            return error;
+
+        _termMacroDefinitions[name] = term;
+        return Result.Success;
+    }
+
+    public Result TryAddTypedTermMacro(string name, Term term)
+    {
+        if (_tokenMacroDefinitions.ContainsKey(name) || _termMacroDefinitions.ContainsKey(name))
+            return $"Macro {name} already exists";
+
+        _termMacroDefinitions[name] = InfTerm.FromTerm(term, true);
+        
+        return Result.Success;
+    }
+    
+    public Result TryAddTypedTermMacro(string name, string value)
+    {
+        if (!TryParseTerm(value).Deconstruct(out var term, out var error))
+            return error;
+        
+        return TryAddTypedTermMacro(name, term);
+    }
+
+    public Result TryRemoveMacro(string name)
+    {
+        if (_termMacroDefinitions.Remove(name))
+            return Result.Success;
+        
+        if (_tokenMacroDefinitions.Remove(name))
+            return Result.Success;
+        
+        return $"Macro {name} does not exist";
+    }
+
+    private Result Lex(string term)
+    {
+        _tokens = _lexer.Lex(term).SelectMany(MacroExpander).ToList();
+        return CheckTokensForErrors();
+    }
+
+    private IEnumerable<Token> MacroExpander(Token token)
+    {
+        if (token is not IdentifierToken(var keyword) || !_tokenMacroDefinitions.TryGetValue(keyword, out var tokens) || _suspendedKeywords.Contains(keyword))
+        {
+            yield return token;
+            yield break;
+        }
+
+        foreach (var tok in tokens)
+        {
+            yield return tok;
+        }
+    }
+
+    private Result CheckTokensForErrors()
+    {
+        var errors = _tokens.Where(token => token is ErrorToken).Cast<ErrorToken>().Select(token => token.Message).ToList();
+        return !errors.Any() ? Result.Success : string.Join("\n", errors);
     }
 
     public Parser(Kernel kernel)
@@ -93,25 +168,18 @@ public sealed class Parser
     
     public bool TryRegisterInfixRule(string keyword, string constant, int precedence, bool leftAssociative)
     {
-        if (!_kernel.TryGetConstantType(constant, out var constantType))
-            return false;
-
-        var fakeType = FakeType.FromType(constantType);
-        if (fakeType is not TyApp { Name: "fun", Args: [_, TyApp { Name: "fun" }] })
-            return false;
-
         if (_customInfixRules.ContainsKey(keyword))
             return false;
         
         if (!_lexer.TryAddKeyword(keyword))
             return false;
 
-        var term = new InfConst(constant, InfType.FromType(constantType, false));
-        
         _customInfixRules[keyword] = (delegate(InfTerm left)
         {
-            _index++;
-            if (!Combination(term, left).Deconstruct(out var leftCombination, out var error))
+            if (!Identifier(constant).Deconstruct(out var term, out var error))
+                return error;
+            
+            if (!Combination(term, left).Deconstruct(out var leftCombination, out error))
                 return error;
 
             if (!ParsePrecedence((InfixPrecedence)(leftAssociative ? precedence + 1 : precedence)).Deconstruct(out var rightTerm, out error))
@@ -128,10 +196,7 @@ public sealed class Parser
     {
         if (arity < 0)
             return false;
-        
-        if (!_kernel.TryGetConstantType(constant, out var constantType))
-            return false;
-        
+
         if (_customPrefixRules.ContainsKey(keyword))
             return false;
         
@@ -185,22 +250,14 @@ public sealed class Parser
 
     public bool TryRegisterLambdaRule(string keyword, string constant)
     {
-        if (!_kernel.TryGetConstantType(constant, out var constantType))
-            return false;
-
-        var fakeType = FakeType.FromType(constantType);
-        if (fakeType is not TyApp { Name: "fun", Args: [_, _] })
-            return false;
-
         if (_customPrefixRules.ContainsKey(keyword))
             return false;
         
         if (!_lexer.TryAddKeyword(keyword))
             return false;
 
-        var term = new InfConst(constant, InfType.FromType(constantType, false));
         
-        _customPrefixRules[keyword] = () => Lambda(term);
+        _customPrefixRules[keyword] = () => Lambda(constant);
         return true;
     }
     
@@ -315,6 +372,8 @@ public sealed class Parser
     private Result<InfTerm> Identifier(string name)
     {
         _index++;
+        if (_termMacroDefinitions.TryGetValue(name, out var macro))
+            return macro;
         return _kernel.ConstantExists(name) ? Constant(name) : Variable(name);
     }
 
@@ -387,11 +446,20 @@ public sealed class Parser
         return Lambda(null);
     }
 
-    private Result<InfTerm> Lambda(InfTerm? modifier)
+    private Result<InfTerm> Lambda(string? modifier)
     {
         var variables = new List<InfVar>();
         string? error;
-        _index++;
+        InfTerm? modifierTerm = null;
+        if (modifier == null)
+        {
+            _index++;
+        }
+        else
+        {
+            if (!Identifier(modifier).Deconstruct(out modifierTerm, out error))
+                return error;
+        }
         
         var startIndex = _index;
         
@@ -410,7 +478,7 @@ public sealed class Parser
                 return "Expected at least one variable in lambda expression";
             
             _index = startIndex;
-            return modifier;
+            return modifierTerm!;
         }
 
         if (!MatchKeyword("."))
@@ -419,7 +487,7 @@ public sealed class Parser
                 return $"Expected '.', got {Current()}";
             
             _index = startIndex;
-            return modifier;
+            return modifierTerm!;
         }
 
         if (!Expression().Deconstruct(out var body, out error))
@@ -429,7 +497,7 @@ public sealed class Parser
         {
             body = modifier == null
                 ? new InfAbs(variables[i], body)
-                : new InfComb(modifier, new InfAbs(variables[i], body));
+                : new InfComb(modifierTerm!, new InfAbs(variables[i], body));
         }
         
         return body;

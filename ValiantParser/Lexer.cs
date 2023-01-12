@@ -101,7 +101,7 @@ internal sealed class Lexer
                 if (validKeywords.Any())
                 {
                     var (newKeyword, newIndexStart) = validKeywords.MinBy(tuple => tuple.indexStart);
-                    validKeywordParts.RemoveWhere(tuple => tuple.indexStart < newIndexStart);
+                    validKeywordParts.RemoveWhere(tuple => tuple.indexStart > newIndexStart);
                     validKeywordParts.Remove((newKeyword, newIndexStart));
                     latestValidKeyword = (newKeyword, newIndexStart);
                         

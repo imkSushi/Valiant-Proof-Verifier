@@ -204,11 +204,21 @@ public class PrettyPrinter : Printer
     
     public override string PrintConst(string name, Type type)
     {
-        return _consts.TryGetValue(name, out var display) ? display : name;
+        if (_consts.TryGetValue(name, out var display))
+            return display;
+        if (_lambdas.TryGetValue(name, out display))
+            return display;
+        if (_prefixes.TryGetValue(name, out display))
+            return display;
+        if (_infixes.TryGetValue(name, out display))
+            return display;
+        
+        
+        return name;
     }
 
     public override string PrintSequent(HashSet<Term> premises, Term conclusion)
     {
-        return $"{string.Join(", ", premises.Select(PrintTerm))} ⊢ {PrintTerm(conclusion)}";
+        return $"{string.Join(", ", premises.Select(PrintTerm))}{(premises.Any() ? " " : "")}⊢ {PrintTerm(conclusion)}";
     }
 }

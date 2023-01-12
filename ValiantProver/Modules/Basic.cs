@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantBasics.Utilities;
 using static ValiantProver.Modules.Theory;
 using static ValiantProver.Modules.TypeUtilities;
@@ -349,6 +350,22 @@ public static class Basic
     
     public static (Type from, Type to) DeconstructFun(this Type type)
     {
-        return type.TryDeconstructFun().ValueOrException();
+        return ((Type from, Type to)) type.TryDeconstructFun();
+    }
+
+    public static Term MapVariableNames(Term term, Dictionary<string, string> names)
+    {
+        if (term.IsConst())
+            return term;
+
+        if (term.TryDeconstructVar().IsSuccess(out var name, out var type))
+            return names.TryGetValue(name, out var newName) ? MakeVariable(newName, type) : term;
+        
+        if (term.TryDeconstructAbs().IsSuccess(out var param, out var body))
+            return MakeAbstraction(MapVariableNames(param, names), MapVariableNames(body, names));
+        
+        var (application, argument) = term.DeconstructComb();
+        
+        return MakeCombination(MapVariableNames(application, names), MapVariableNames(argument, names));
     }
 }

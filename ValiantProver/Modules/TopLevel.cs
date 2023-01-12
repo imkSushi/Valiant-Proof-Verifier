@@ -6,6 +6,7 @@ public static class TopLevel
 
     static TopLevel()
     {
-        TautologyEvaluator.Load();
+        FunctionJectivityTheorems.Load();
+        IndividualsTheorems.Load();
     }
 }

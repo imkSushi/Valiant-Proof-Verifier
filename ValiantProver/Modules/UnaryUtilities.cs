@@ -1,5 +1,6 @@
 ﻿using ValiantBasics;
 using ValiantProofVerifier;
+using ValiantResults;
 using static ValiantProver.Modules.Basic;
 using static ValiantProver.Modules.BinaryUtilities;
 using static ValiantProver.Modules.LambdaEvaluator;
@@ -78,12 +79,12 @@ public static class UnaryUtilities
 
     public static Term UnaryDeconstruct(Term term, string expectedOp)
     {
-        return TryUnaryDeconstruct(term, expectedOp).ValueOrException();
+        return (Term) TryUnaryDeconstruct(term, expectedOp);
     }
     
     public static Term UnaryDeconstruct(Theorem theorem, string expectedOp)
     {
-        return TryUnaryDeconstruct(theorem, expectedOp).ValueOrException();
+        return (Term) TryUnaryDeconstruct(theorem, expectedOp);
     }
     
     public static Result<Term, Term> TryUnaryDeconstruct(Term term) //op & arg
